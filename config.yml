@@ -1,0 +1,9 @@
+#
+# Configuration for workers
+#
+
+---
+
+# Job servers ("host:port"; default port is 4730)
+servers:
+    - "127.0.0.1:4730"
