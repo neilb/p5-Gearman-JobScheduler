@@ -73,6 +73,41 @@ requires 'unique';
 #
 
 
+# Job ID's length limit
+use constant GJS_JOB_ID_MAX_LENGTH => 256;
+
+
+# (static) Return an unique, safe job name which is suitable for writing to the filesystem
+sub _unique_job_id($$)
+{
+	my ($function_name, $job_args) = @_;
+
+	my $ug    = new Data::UUID;
+	my $uuid = $ug->create_str();	# e.g. 059303A4-F3F1-11E2-9246-FB1713B42706
+	$uuid =~ s/\-//gs;				# e.g. 059303A4F3F111E29246FB1713B42706
+
+	unless ($function_name) {
+		return undef;
+	}
+
+	# Convert to string
+	$job_args = ($job_args and scalar keys $job_args)
+		? join(', ', map { "$_ = $job_args->{$_}" } keys $job_args)
+		: '';
+
+	# UUID goes first in case the job name shortener decides to cut out a part of the job ID
+	my $job_id = "$uuid.$function_name($job_args)";
+	if (length ($job_id) > GJS_JOB_ID_MAX_LENGTH) {
+		$job_id = substr($job_id, 0, GJS_JOB_ID_MAX_LENGTH);
+	}
+
+	# Sanitize path
+	$job_id =~ s/[^a-zA-Z0-9\.\-_\(\)=,]/_/gi;
+
+	return $job_id;
+}
+
+
 # Run locally and right away, blocking the parent process while it gets finished
 # (issued either by the original caller or the Gearman worker)
 # Returns result (may be false of undef) on success, die()s on error
@@ -87,12 +122,11 @@ sub run_locally($;$)
 		die "run() should accept arguments as a hashref";
 	}
 
-	my $ug    = new Data::UUID;
-	my $uuid = $ug->create_str();
-
-	my $job_name = '' . ref($self);
-	my $job_args = $args ? '{' . join(', ', map { "$_ => $args->{$_}" } keys $args) . '}' : '';
-	my $job_id = "$job_name($job_args).$uuid";
+	my $function_name = '' . ref($self);
+	my $job_id = _unique_job_id($function_name, $args);
+	unless ($job_id) {
+		die "Unable to determine unique job ID";
+	}
 
 	my $starting_job_message = "Starting job ID \"$job_id\" ...";
 	my $finished_job_message;
@@ -115,10 +149,6 @@ sub run_locally($;$)
 	my $result;
 
 	eval {
-
-		# say STDERR "Job name: " . $job_name;
-		# say STDERR "Job args: " . $job_args;
-		# say STDERR "Job ID: " . $job_id;
 
 		say STDERR $starting_job_message;
 		say STDERR "========";
@@ -232,9 +262,9 @@ sub _task_from_args($$;$)
 		die "run() should accept arguments as a hashref";
 	}
 
-	my $job_name = '' . ref($self);
-	unless ($job_name) {
-		die "Unable to determine job name.";
+	my $function_name = '' . ref($self);
+	unless ($function_name) {
+		die "Unable to determine function name.";
 	}
 
 	# Gearman accepts only scalar arguments
@@ -254,7 +284,7 @@ sub _task_from_args($$;$)
 		die "Unable to serialize the argument hash with the Storable module because: $@";
 	}
 
-	my $task = Gearman::Task->new($job_name, \$args_serialized, {
+	my $task = Gearman::Task->new($function_name, \$args_serialized, {
 		uniq => $self->unique,
 		on_complete => sub { say STDERR "Complete!" },
 		on_fail => sub { say STDERR "Failed for the last time" },
