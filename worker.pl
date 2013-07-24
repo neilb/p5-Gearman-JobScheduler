@@ -45,9 +45,8 @@ sub main()
 	my $worker = Gearman::Worker->new;
     $worker->job_servers(@{$config->{servers}});
 
-    my $job = $gearman_function_name->new();
-
 	$worker->register_function($gearman_function_name, sub {
+	    my $job = $gearman_function_name->new();
 		$job->_run_locally_from_gearman_worker($_[0]);
 	});
 
