@@ -39,32 +39,44 @@ use Log::Log4perl qw(:easy);
 #     * $args (hashref) as the second parameter
 # * returns result on success (serializable by the Storable module)
 #     * the result will be discarded if the job is ordered on Gearman as a background process
+# * provides progress reports when available:
+#     * if progress_expected() is enabled
+#     * by calling $self->progress($numerator, $denominator)
 # * die()s on error
 # * writes log to STDOUT or STDERR (preferably the latter)
 requires 'run';
 
 
-# Return the timeout of each job
-# ------------------------------
+# (static) Return the timeout of each job
+# ---------------------------------------
 #
 # Returns the timeout (in seconds) of each job or 0 if there's no timeout.
 requires 'job_timeout';
 
 
-# Return the number of retries for each job
-# -----------------------------------------
+# (static) Return the number of retries for each job
+# --------------------------------------------------
 #
 # Returns a number of retries each job will be attempted at.
 # Return 0 if the job should not be retried.
 requires 'retries';
 
 
-# Return true if the function is "unique"
-# ---------------------------------------
+# (static) Return true if the function is "unique"
+# ------------------------------------------------
 #
 # Returns true if two or more jobs with the same parameters can not be run at
 # the same and instead should be merged into one.
 requires 'unique';
+
+
+# (static) Return true if the function's jobs are expected to provide progress
+# ----------------------------------------------------------------------------
+#
+# Returns true if the function's individual jobs are expected to provide
+# progress reports via $self->progress($numerator, $denominator).
+requires 'progress_expected';
+
 
 
 #
@@ -73,8 +85,42 @@ requires 'unique';
 #
 
 
-# Job ID's length limit
-use constant GJS_JOB_ID_MAX_LENGTH => 256;
+#
+# HELPERS
+# =======
+#
+
+# Provide progress report while running the task
+# ----------------------------------------------
+#
+# Params:
+# * $self
+# * numerator
+# * denominator
+#
+# Examples:
+# $self->progress(3, 10) -- 3 out of 10 subtasks are complete
+# $self->progress(45, 100) -- 45 out of 100 subtasks are complete (or 45% complete)
+sub progress($$$)
+{
+	my ($self, $numerator, $denominator) = @_;
+
+	unless ($self->_gearman_worker) {
+		die "Gearman worker is not defined.";
+	}
+	unless ($denominator) {
+		die "Denominator is 0.";
+	}
+
+	say STDERR "$numerator/$denominator complete.";
+
+	$self->_gearman_worker->set_status($numerator, $denominator);
+}
+
+#
+# ==============
+# END OF HELPERS
+#
 
 
 
@@ -268,20 +314,27 @@ sub _gearman_task_from_args($$;$)
 }
 
 
+# _run_locally_from_gearman_worker() will temporarily place a Gearman worker to
+# this variable so that progress() helper can use it
+has '_gearman_worker' => ( is => 'rw' );
+
 # Run locally and right away, blocking the parent process while it gets finished
-# (issued either by the original caller or the Gearman worker)
+# (issued either by the Gearman worker)
 # Returns result (may be false of undef) on success, die()s on error
-sub _run_locally_thaw_args($;$)
+sub _run_locally_from_gearman_worker($;$)
 {
 	my $self = shift;
-	my $args = shift;
+	my $gearman_worker = shift;
 
-	my $args_deserialized = \%{ thaw($args) };
+	# Arguments are thawed
+	my $args_deserialized = \%{ thaw($gearman_worker->arg) };
 
 	my $result;
+	$self->_gearman_worker($gearman_worker);	# will be used by progress()
 	eval {
 		$result = $self->run_locally($args_deserialized);
 	};
+	$self->_gearman_worker(undef);				# clear the variable no matter how the job finished
 	if ($@) {
 		LOGDIE("$@");
 	}
@@ -325,6 +378,9 @@ sub _run_locally_thaw_args($;$)
 
 	1;
 }
+
+# Job ID's length limit
+use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
 # (static) Return an unique, safe job name which is suitable for writing to the filesystem
 sub _unique_job_id($$)

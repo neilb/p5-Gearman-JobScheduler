@@ -32,6 +32,8 @@ sub run($;$)
 	    say STDERR "Take one down, pass it around,";
 	    say STDERR $_ - 1, " bottle${oneLessS} of beer on the wall";
 
+	    $self->progress(($how_many_bottles - $_ + 1), $how_many_bottles);
+
 	    usleep(SLEEP_BETWEEN_BOTTLES);
 	}
 	say STDERR "";
@@ -60,6 +62,13 @@ sub retries()
 
 # Don't allow two or more jobs with the same parameters to run at once?
 sub unique()
+{
+	return 1;
+}
+
+
+# Each job will provide progress reports via $self->progress($numerator, $denominator)?
+sub progress_expected()
 {
 	return 1;
 }

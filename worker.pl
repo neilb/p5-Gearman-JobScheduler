@@ -48,7 +48,7 @@ sub main()
     my $job = $gearman_function_name->new();
 
 	$worker->register_function($gearman_function_name, sub {
-		$job->_run_locally_thaw_args($_[0]->arg);
+		$job->_run_locally_from_gearman_worker($_[0]);
 	});
 
     INFO("Worker is ready and accepting jobs");
