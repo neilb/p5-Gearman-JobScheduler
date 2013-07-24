@@ -5,7 +5,7 @@ use warnings;
 use Modern::Perl "2012";
 
 use Moose;
-with 'GJS::AbstractJob';
+with 'GJS::AbstractFunction';
 
 use Time::HiRes qw(usleep nanosleep);
 use Data::Dumper;
@@ -43,7 +43,7 @@ sub run($;$)
 }
 
 
-# Return job's timeout (0 for no timeout)
+# Return individual job's timeout (0 for no timeout)
 sub job_timeout()
 {
 	# No timeout
@@ -58,7 +58,7 @@ sub retries()
 }
 
 
-# Don't allow two or more tasks with the same parameters to run at once?
+# Don't allow two or more jobs with the same parameters to run at once?
 sub unique()
 {
 	return 1;

@@ -1,4 +1,4 @@
-package GJS::AbstractJob;
+package GJS::AbstractFunction;
 
 use strict;
 use warnings;
@@ -59,10 +59,10 @@ requires 'job_timeout';
 requires 'retries';
 
 
-# Return true if the job is "unique"
-# ----------------------------------
+# Return true if the function is "unique"
+# ---------------------------------------
 #
-# Returns true if two or more tasks with the same parameters can not be run at
+# Returns true if two or more jobs with the same parameters can not be run at
 # the same and instead should be merged into one.
 requires 'unique';
 
@@ -76,36 +76,6 @@ requires 'unique';
 # Job ID's length limit
 use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
-
-# (static) Return an unique, safe job name which is suitable for writing to the filesystem
-sub _unique_job_id($$)
-{
-	my ($function_name, $job_args) = @_;
-
-	my $ug    = new Data::UUID;
-	my $uuid = $ug->create_str();	# e.g. 059303A4-F3F1-11E2-9246-FB1713B42706
-	$uuid =~ s/\-//gs;				# e.g. 059303A4F3F111E29246FB1713B42706
-
-	unless ($function_name) {
-		return undef;
-	}
-
-	# Convert to string
-	$job_args = ($job_args and scalar keys $job_args)
-		? join(', ', map { "$_ = $job_args->{$_}" } keys $job_args)
-		: '';
-
-	# UUID goes first in case the job name shortener decides to cut out a part of the job ID
-	my $job_id = "$uuid.$function_name($job_args)";
-	if (length ($job_id) > GJS_JOB_ID_MAX_LENGTH) {
-		$job_id = substr($job_id, 0, GJS_JOB_ID_MAX_LENGTH);
-	}
-
-	# Sanitize path
-	$job_id =~ s/[^a-zA-Z0-9\.\-_\(\)=,]/_/gi;
-
-	return $job_id;
-}
 
 
 # Run locally and right away, blocking the parent process while it gets finished
@@ -122,7 +92,7 @@ sub run_locally($;$)
 		die "run() should accept arguments as a hashref";
 	}
 
-	my $function_name = '' . ref($self);
+	my $function_name = $self->_function_name();
 	my $job_id = _unique_job_id($function_name, $args);
 	unless ($job_id) {
 		die "Unable to determine unique job ID";
@@ -205,7 +175,7 @@ sub run_on_gearman($;$)
 	my $client = Gearman::Client->new;
 	$client->job_servers(@{$config->{servers}});
 
-	my $task = $self->_task_from_args($config, $args);
+	my $task = $self->_gearman_task_from_args($config, $args);
 	my $result_ref = $client->do_task($task);
     # say STDERR "Serialized result: " . Dumper($result_ref);
 
@@ -230,7 +200,7 @@ sub enqueue_on_gearman($;$)
 	my $client = Gearman::Client->new;
 	$client->job_servers(@{$config->{servers}});
 
-	my $task = $self->_task_from_args($config, $args);
+	my $task = $self->_gearman_task_from_args($config, $args);
 	my $job_id = $client->dispatch_background($task);
     
 	return $job_id;
@@ -252,7 +222,7 @@ sub _configuration($)
 
 
 # Validate the job arguments, create Gearman task from parameters or die on error
-sub _task_from_args($$;$)
+sub _gearman_task_from_args($$;$)
 {
 	my $self = shift;
 	my $config = shift;
@@ -262,7 +232,7 @@ sub _task_from_args($$;$)
 		die "run() should accept arguments as a hashref";
 	}
 
-	my $function_name = '' . ref($self);
+	my $function_name = $self->_function_name;
 	unless ($function_name) {
 		die "Unable to determine function name.";
 	}
@@ -356,6 +326,44 @@ sub _run_locally_thaw_args($;$)
 	1;
 }
 
+# (static) Return an unique, safe job name which is suitable for writing to the filesystem
+sub _unique_job_id($$)
+{
+	my ($function_name, $job_args) = @_;
+
+	my $ug    = new Data::UUID;
+	my $uuid = $ug->create_str();	# e.g. 059303A4-F3F1-11E2-9246-FB1713B42706
+	$uuid =~ s/\-//gs;				# e.g. 059303A4F3F111E29246FB1713B42706
+
+	unless ($function_name) {
+		return undef;
+	}
+
+	# Convert to string
+	$job_args = ($job_args and scalar keys $job_args)
+		? join(', ', map { "$_ = $job_args->{$_}" } keys $job_args)
+		: '';
+
+	# UUID goes first in case the job name shortener decides to cut out a part of the job ID
+	my $job_id = "$uuid.$function_name($job_args)";
+	if (length ($job_id) > GJS_JOB_ID_MAX_LENGTH) {
+		$job_id = substr($job_id, 0, GJS_JOB_ID_MAX_LENGTH);
+	}
+
+	# Sanitize path
+	$job_id =~ s/[^a-zA-Z0-9\.\-_\(\)=,]/_/gi;
+
+	return $job_id;
+}
+
+
+# Returns function name (e.g. 'NinetyNineBottlesOfBeer')
+sub _function_name($)
+{
+	my $self = shift;
+
+	return '' . ref($self);
+}
 
 # Reset Log::Log4perl to write to the STDERR / STDOUT and not to file
 sub _reset_log4perl()
