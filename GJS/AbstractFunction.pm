@@ -6,6 +6,8 @@ use Modern::Perl "2012";
 
 use Moose::Role;
 
+use GJS::ErrorLogTrapper;
+
 use IO::File;
 use Capture::Tiny ':all';
 use Time::HiRes;
@@ -21,6 +23,7 @@ use Sys::Path;
 use File::Path qw(make_path);
 
 use constant GJS_CONFIG_FILE => 'config.yml';
+use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
 # used for capturing STDOUT and STDERR output of each job and timestamping it;
 # initialized before each job
@@ -165,8 +168,8 @@ sub run_locally($;$)
 
 
 	# Tie STDOUT / STDERR to Log4perl handler
-	tie *STDOUT, "_ErrorLogTrapper";
-	tie *STDERR, "_ErrorLogTrapper";
+	tie *STDOUT, "GJS::ErrorLogTrapper";
+	tie *STDERR, "GJS::ErrorLogTrapper";
 
 	my $result;
 
@@ -362,35 +365,6 @@ sub _run_locally_from_gearman_worker($;$)
 
 	return $result_serialized;
 }
-
-
-{
-	# Log4perl's trapper module
-	# (http://log4perl.sourceforge.net/releases/Log-Log4perl/docs/html/Log/Log4perl/FAQ.html#e95ee)
-	package _ErrorLogTrapper;
-
-	use strict;
-	use warnings;
-
-	use Log::Log4perl qw(:easy);
-
-	sub TIEHANDLE {
-		my $class = shift;
-		bless [], $class;
-	}
-
-	sub PRINT {
-		my $self = shift;
-		$Log::Log4perl::caller_depth++;
-		DEBUG @_;
-		$Log::Log4perl::caller_depth--;
-	}
-
-	1;
-}
-
-# Job ID's length limit
-use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
 # (static) Return an unique, safe job name which is suitable for writing to the filesystem
 sub _unique_job_id($$)
