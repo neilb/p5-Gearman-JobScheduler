@@ -17,6 +17,8 @@ use Gearman::Worker;
 use YAML qw(LoadFile);
 use Storable qw(freeze thaw);
 use Data::Compare;
+use Sys::Path;
+use File::Path qw(make_path);
 
 use constant GJS_CONFIG_FILE => 'config.yml';
 
@@ -123,7 +125,6 @@ sub progress($$$)
 #
 
 
-
 # Run locally and right away, blocking the parent process while it gets finished
 # (issued either by the original caller or the Gearman worker)
 # Returns result (may be false of undef) on success, die()s on error
@@ -144,7 +145,12 @@ sub run_locally($;$)
 		die "Unable to determine unique job ID";
 	}
 
-	my $starting_job_message = "Starting job ID \"$job_id\" ...";
+	my $log_path = $self->_init_and_return_worker_log_dir . $job_id . '.log';
+	if ( -f $log_path ) {
+		die "Worker log already exists at path '$log_path'.";
+	}
+
+	my $starting_job_message = "Starting job ID \"$job_id\", logging to \"$log_path\" ...";
 	my $finished_job_message;
 
 	_reset_log4perl();
@@ -153,7 +159,7 @@ sub run_locally($;$)
 	Log::Log4perl->easy_init({
 		level => $DEBUG,
 		utf8=>1,
-		file => 'out.txt',	# do not use STDERR / STDOUT here because it would end up with recursion
+		file => $log_path,	# do not use STDERR / STDOUT here because it would end up with recursion
 		layout => "%d{ISO8601} [%P]: %m"
 	});
 
@@ -225,8 +231,12 @@ sub run_on_gearman($;$)
 	my $result_ref = $client->do_task($task);
     # say STDERR "Serialized result: " . Dumper($result_ref);
 
-	my $result_deserialized = thaw($$result_ref);
-	$result_deserialized = $$result_deserialized;
+	my $result_deserialized = undef;
+
+	if (defined $result_ref) {
+		$result_deserialized = thaw($$result_ref);
+		$result_deserialized = $$result_deserialized;
+	}
 
 	return $result_deserialized;
 }
@@ -421,7 +431,7 @@ sub _function_name($)
 	return '' . ref($self);
 }
 
-# Reset Log::Log4perl to write to the STDERR / STDOUT and not to file
+# (static) Reset Log::Log4perl to write to the STDERR / STDOUT and not to file
 sub _reset_log4perl()
 {
 	Log::Log4perl->easy_init({
@@ -429,6 +439,23 @@ sub _reset_log4perl()
 		utf8=>1,
 		layout => "%d{ISO8601} [%P]: %m%n"
 	});
+}
+
+# Initialize (create missing directories) and return a worker log directory path (with trailing slash)
+sub _init_and_return_worker_log_dir($)
+{
+	my ($self) = @_;
+
+	my $config = $self->_configuration;
+	my $worker_log_dir = $config->{worker_log_dir} || Sys::Path->logdir . '/gjs/';
+
+    $worker_log_dir =~ s!/*$!/!;    # Add a trailing slash
+
+    unless ( -d $worker_log_dir ) {
+    	make_path( $worker_log_dir );
+    }
+
+    return $worker_log_dir;
 }
 
 

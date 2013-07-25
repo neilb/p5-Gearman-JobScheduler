@@ -1,9 +1,12 @@
 #
-# Configuration for workers
+# Configuration
 #
 
 ---
 
-# Job servers ("host:port"; default port is 4730)
+# (Workers, clients) Job servers ("host:port"; default port is 4730)
 servers:
     - "127.0.0.1:4730"
+
+# (Workers) Where should the worker put the logs (default is /var/log/gjs)
+# worker_log_dir: "/var/log/gjs"
