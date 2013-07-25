@@ -20,16 +20,30 @@ use constant GJS_CONFIG_FILE => 'config.yml';
 sub main()
 {
 	unless (scalar (@ARGV) == 1) {
-		LOGDIE("Usage: $0 GearmanFunction");
+		die "Usage: $0 GearmanFunction\n   or: $0 path/to/GearmanFunction.pm\n";
 	}
 
 	my $gearman_function_name = $ARGV[0];
 
     eval {
-        ( my $file = $gearman_function_name ) =~ s|::|/|g;
-        require $file . '.pm';
-        $gearman_function_name->import();
-        1;
+    	if ($gearman_function_name =~ /\.pm$/) {
+    		# /somewhere/Foo/Bar.pm
+
+    		# Expect the package to return its name so that we'll know how to call it:
+    		# http://stackoverflow.com/a/9850017/200603
+    		$gearman_function_name = require $gearman_function_name;
+    		if ($gearman_function_name . '' eq '1') {
+    			die "The function package should return __PACKAGE__ at the end of the file instead of just 1.";
+    		}
+	        $gearman_function_name->import();
+    		1;
+    	} else {
+    		# Foo::Bar
+	        ( my $file = $gearman_function_name ) =~ s|::|/|g;
+	        require $file . '.pm';
+	        $gearman_function_name->import();
+	        1;
+    	}
     } or do
     {
 		LOGDIE("Unable to find Gearman function '$gearman_function_name': $@");
