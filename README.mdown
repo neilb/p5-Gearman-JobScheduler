@@ -1,0 +1,138 @@
+# NAME
+
+`GJS::AbstractFunction` - An abstract class for a Gearman "function" which
+is to be derived by working Gearman "functions".
+
+
+
+# LINGO
+
+- Gearman function
+
+    A function to be run by Gearman or locally, e.g. `add_default_feeds`.
+
+- Gearman job
+
+    An instance of the Gearman function doing the actual job with specific parameters.
+
+# ABSTRACT INTERFACE
+
+The following subroutines must be implemented by the subclasses of this class.
+
+## `run($self, $args)`
+
+Run the job.
+
+Parameters:
+
+- `$self`, a reference to the instance of the Gearman function class
+- (optional) `$args` (hashref), arguments needed for running the
+Gearman function
+
+An instance (object) of the class will be created before each run. Class
+instance variables (e.g. `$self->_my_variable`) will be discarded after
+each run.
+
+Returns result on success (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module). The result
+will be discarded if the job is ordered on Gearman as a background process.
+
+Provides progress reports when available:
+
+- if `progress_expected()` is enabled
+- by calling `$self->progress($numerator, $denominator)`
+
+`die()`s on error.
+
+Writes log to `STDOUT` or `STDERR` (preferably the latter).
+
+## (static) `job_timeout()`
+
+Return the timeout of each job.
+
+Returns the timeout (in seconds) of each job or 0 if there's no timeout.
+
+## (static) `retries()`
+
+Return the number of retries for each job.
+
+Returns a number of retries each job will be attempted at. Returns 0 if the job
+should not be retried.
+
+## (static) `unique()`
+
+Return true if the function is "unique".
+
+Returns true if two or more jobs with the same parameters can not be run at the
+same and instead should be merged into one.
+
+## (static) `progress_expected()`
+
+Return true if the function's jobs are expected to provide progress.
+
+Returns true if the function's individual jobs are expected to provide progress
+reports via `$self->progress($numerator, $denominator)`.
+
+# HELPER SUBROUTINES
+
+The following subroutines can be used by the deriving class.
+
+## `$self->progress($numerator, $denominator)`
+
+Provide progress report while running the task (from `run()`).
+
+Examples:
+
+- `$self->progress(3, 10)`
+
+    3 out of 10 subtasks are complete.
+
+- `$self->progress(45, 100)`
+
+    45 out of 100 subtasks are complete (or 45% complete).
+
+# CLIENT SUBROUTINES
+
+The following subroutines can be used by "clients" in order to issue a Gearman
+function.
+
+## (static) `run_locally($args)`
+
+Run locally and right away, blocking the parent process until it gets finished.
+
+Parameters:
+
+- (optional) `$args` (hashref), arguments required for running the
+Gearman function  (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
+
+Returns result (may be false of `undef`) on success, `die()`s on error
+
+## (static) `run_on_gearman($args)`
+
+Run on Gearman, wait for the task to complete, return the result; block the
+process until the job is complete.
+
+Parameters:
+
+- (optional) `$args` (hashref), arguments needed for running the Gearman
+function (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
+
+Returns result (may be false of `undef`) on success, `die()`s on error
+
+## (static) `enqueue_on_gearman($args)`
+
+Enqueue on Gearman, do not wait for the task to complete, return immediately;
+do not block the parent process until the job is complete.
+
+Parameters:
+
+- (optional) `$args` (hashref), arguments needed for running the Gearman
+function (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
+
+Returns Gearman-provided string job identifier if the job was enqueued
+successfully, `die()`s on error.
+
+# TODO
+
+- improve differentiation between jobs, functions, tasks, etc.
+- progress reports
+- log job retries
