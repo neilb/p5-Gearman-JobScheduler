@@ -225,7 +225,7 @@ sub run_locally($;$$)
 		die "Unable to determine unique job ID";
 	}
 
-	my $log_path = $class->_init_and_return_worker_log_dir . $job_id . '.log';
+	my $log_path = $class->_init_and_return_worker_log_dir($function_name) . $job_id . '.log';
 	if ( -f $log_path ) {
 		die "Worker log already exists at path '$log_path'.";
 	}
@@ -559,9 +559,9 @@ sub _reset_log4perl()
 }
 
 # (static) Initialize (create missing directories) and return a worker log directory path (with trailing slash)
-sub _init_and_return_worker_log_dir($)
+sub _init_and_return_worker_log_dir($$)
 {
-	my ($class) = @_;
+	my ($class, $function_name) = @_;
 
 	if (ref $class) {
 		die "Use this subroutine as a static method.";
@@ -570,7 +570,11 @@ sub _init_and_return_worker_log_dir($)
 	my $config = $class->_configuration;
 	my $worker_log_dir = $config->{worker_log_dir} || Sys::Path->logdir . '/gjs/';
 
-    $worker_log_dir =~ s!/*$!/!;    # Add a trailing slash
+	# Add a trailing slash
+    $worker_log_dir =~ s!/*$!/!;
+
+    # Append the function name
+    $worker_log_dir .= $function_name . '/';
 
     unless ( -d $worker_log_dir ) {
     	make_path( $worker_log_dir );
@@ -593,7 +597,5 @@ no Moose;    # gets rid of scaffolding
 =item * improve differentiation between jobs, functions, tasks, etc.
 
 =item * progress reports
-
-=item * write different functions' logs to different subdirs
 
 =back
