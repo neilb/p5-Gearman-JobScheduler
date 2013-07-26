@@ -64,22 +64,19 @@ Parameters:
 
 =over 4
 
-=item * C<$self> as the first parameter
+=item * C<$self>, a reference to the instance of the Gearman function class
 
-=item * (optional) C<$args> (hashref) as the second parameter
-
-=back
-
-Does not use class instance variables because their behavior is undefined.
-
-Returns result on success (serializable by the L<Storable> module):
-
-=over 4
-
-=item * the result will be discarded if the job is ordered on Gearman as a
-background process.
+=item * (optional) C<$args> (hashref), arguments needed for running the
+Gearman function
 
 =back
+
+An instance (object) of the class will be created before each run. Class
+instance variables (e.g. C<$self-E<gt>_my_variable>) will be discarded after
+each run.
+
+Returns result on success (serializable by the L<Storable> module). The result
+will be discarded if the job is ordered on Gearman as a background process.
 
 Provides progress reports when available:
 
@@ -155,10 +152,13 @@ Examples:
 
 =over 4
 
-=item * C<$self-E<gt>progress(3, 10)> - 3 out of 10 subtasks are complete
+=item * C<$self-E<gt>progress(3, 10)>
 
-=item * C<$self-E<gt>progress(45, 100)> - 45 out of 100 subtasks are complete
-(or 45% complete)
+3 out of 10 subtasks are complete.
+
+=item * C<$self-E<gt>progress(45, 100)>
+
+45 out of 100 subtasks are complete (or 45% complete).
 
 =back
 
@@ -167,8 +167,9 @@ sub progress($$$)
 {
 	my ($self, $numerator, $denominator) = @_;
 
-	unless ($self->_gearman_worker) {
-		die "Gearman worker is not defined.";
+	unless (defined $self->_gearman_worker) {
+		# Running the job locally, Gearman doesn't have anything to do with this run
+		return;
 	}
 	unless ($denominator) {
 		die "Denominator is 0.";
@@ -186,7 +187,7 @@ sub progress($$$)
 The following subroutines can be used by "clients" in order to issue a Gearman
 function.
 
-=head2 C<$instance-E<gt>run_locally($args)>
+=head2 (static) C<run_locally($args)>
 
 Run locally and right away, blocking the parent process until it gets finished.
 
@@ -194,32 +195,37 @@ Parameters:
 
 =over 4
 
-=item * (optional) C<$args> (hashref) as the second parameter (serializable by the
-L<Storable> module)
+=item * (optional) C<$args> (hashref), arguments required for running the
+Gearman function  (serializable by the L<Storable> module)
 
 =back
 
 Returns result (may be false of C<undef>) on success, C<die()>s on error
 
 =cut
-sub run_locally($;$)
+sub run_locally($;$$)
 {
-	my $self = shift;
+	my $class = shift;
 	my $args = shift;
+	my $gearman_worker = shift;
+
+	if (ref $class) {
+		die "Use this subroutine as a static method, e.g. MyGearmanFunction->run_locally()";
+	}
 
 	# say STDERR "Running locally";
 
-	if (@_ or ($args and ref($args) ne 'HASH' )) {
-		die "run() should accept arguments as a hashref";
+	if (@_ or($args and ref($args) ne 'HASH' ) or (defined $gearman_worker and ref($gearman_worker) ne 'Gearman::Job' and ref($gearman_worker) ne 'Gearman::Worker')) {
+		die "run() should accept a single hashref for all the arguments.";
 	}
 
-	my $function_name = $self->_function_name();
+	my $function_name = $class->_function_name();
 	my $job_id = _unique_job_id($function_name, $args);
 	unless ($job_id) {
 		die "Unable to determine unique job ID";
 	}
 
-	my $log_path = $self->_init_and_return_worker_log_dir . $job_id . '.log';
+	my $log_path = $class->_init_and_return_worker_log_dir . $job_id . '.log';
 	if ( -f $log_path ) {
 		die "Worker log already exists at path '$log_path'.";
 	}
@@ -254,7 +260,16 @@ sub run_locally($;$)
 
 		# Try to run the job
 		eval {
-			$result = $self->run($args);
+			my $instance = $class->new();
+
+			# undef when running locally, instance when issued from _run_locally_from_gearman_worker
+			$instance->_gearman_worker($gearman_worker);
+
+			# Do the work
+			$result = $instance->run($args);
+
+			# Destroy instance
+			$instance = undef;
 		};
 	    if ( $@ )
 	    {
@@ -288,7 +303,7 @@ sub run_locally($;$)
 }
 
 
-=head2 C<$instance-E<gt>run_on_gearman($args)>
+=head2 (static) C<run_on_gearman($args)>
 
 Run on Gearman, wait for the task to complete, return the result; block the
 process until the job is complete.
@@ -297,8 +312,8 @@ Parameters:
 
 =over 4
 
-=item * (optional) C<$args> (hashref) as the second parameter (serializable by the
-L<Storable> module)
+=item * (optional) C<$args> (hashref), arguments needed for running the Gearman
+function (serializable by the L<Storable> module)
 
 =back
 
@@ -307,15 +322,19 @@ Returns result (may be false of C<undef>) on success, C<die()>s on error
 =cut
 sub run_on_gearman($;$)
 {
-	my $self = shift;
+	my $class = shift;
 	my $args = shift;
 
-	my $config = $self->_configuration;
+	if (ref $class) {
+		die "Use this subroutine as a static method, e.g. MyGearmanFunction->run_on_gearman()";
+	}
+
+	my $config = $class->_configuration;
 
 	my $client = Gearman::Client->new;
 	$client->job_servers(@{$config->{servers}});
 
-	my $task = $self->_gearman_task_from_args($config, $args);
+	my $task = $class->_gearman_task_from_args($config, $args);
 	my $result_ref = $client->do_task($task);
     # say STDERR "Serialized result: " . Dumper($result_ref);
 
@@ -330,7 +349,7 @@ sub run_on_gearman($;$)
 }
 
 
-=head2 C<$instance-E<gt>enqueue_on_gearman($args)>
+=head2 (static) C<enqueue_on_gearman($args)>
 
 Enqueue on Gearman, do not wait for the task to complete, return immediately;
 do not block the parent process until the job is complete.
@@ -339,8 +358,8 @@ Parameters:
 
 =over 4
 
-=item * (optional) C<$args> (hashref) as the second parameter (serializable by the
-L<Storable> module)
+=item * (optional) C<$args> (hashref), arguments needed for running the Gearman
+function (serializable by the L<Storable> module)
 
 =back
 
@@ -350,25 +369,29 @@ successfully, C<die()>s on error.
 =cut
 sub enqueue_on_gearman($;$)
 {
-	my $self = shift;
+	my $class = shift;
 	my $args = shift;
 
-	my $config = $self->_configuration;
+	if (ref $class) {
+		die "Use this subroutine as a static method, e.g. MyGearmanFunction->enqueue_on_gearman()";
+	}
+
+	my $config = $class->_configuration;
 
 	my $client = Gearman::Client->new;
 	$client->job_servers(@{$config->{servers}});
 
-	my $task = $self->_gearman_task_from_args($config, $args);
+	my $task = $class->_gearman_task_from_args($config, $args);
 	my $job_id = $client->dispatch_background($task);
     
 	return $job_id;
 }
 
 
-# Return configuration, die() on error
+# (static) Return configuration, die() on error
 sub _configuration($)
 {
-	my $self = shift;
+	my $class = shift;
 
 	my $config = LoadFile(GJS_CONFIG_FILE) or LOGDIE("Unable to read configuration from '" . GJS_CONFIG_FILE . "': $!");
 	unless (scalar (@{$config->{servers}})) {
@@ -379,18 +402,22 @@ sub _configuration($)
 }
 
 
-# Validate the job arguments, create Gearman task from parameters or die on error
+# (static) Validate the job arguments, create Gearman task from parameters or die on error
 sub _gearman_task_from_args($$;$)
 {
-	my $self = shift;
+	my $class = shift;
 	my $config = shift;
 	my $args = shift;
+
+	if (ref $class) {
+		die "Use this subroutine as a static method.";
+	}
 
 	if (@_ or ($args and ref($args) ne 'HASH' )) {
 		die "run() should accept arguments as a hashref";
 	}
 
-	my $function_name = $self->_function_name;
+	my $function_name = $class->_function_name;
 	unless ($function_name) {
 		die "Unable to determine function name.";
 	}
@@ -413,40 +440,44 @@ sub _gearman_task_from_args($$;$)
 	}
 
 	my $task = Gearman::Task->new($function_name, \$args_serialized, {
-		uniq => $self->unique,
+		uniq => $class->unique,
 		on_complete => sub { say STDERR "Complete!" },
 		on_fail => sub { say STDERR "Failed for the last time" },
 		on_retry => sub { say STDERR "Retry" },
 		on_status => sub { say STDERR "Status" },
-		retry_count => $self->retries,
-		try_timeout => $self->job_timeout,
+		retry_count => $class->retries,
+		try_timeout => $class->job_timeout,
 	});
 
 	return $task;
 }
 
 
-# _run_locally_from_gearman_worker() will temporarily place a Gearman worker to
-# this variable so that progress() helper can use it
+# _run_locally_from_gearman_worker() will pass this parameter to run_locally()
+# which in turn will temporarily place a Gearman worker to this variable so
+# that progress() helper can use it
 has '_gearman_worker' => ( is => 'rw' );
+
 
 # Run locally and right away, blocking the parent process while it gets finished
 # (issued either by the Gearman worker)
 # Returns result (may be false of undef) on success, die()s on error
 sub _run_locally_from_gearman_worker($;$)
 {
-	my $self = shift;
+	my $class = shift;
 	my $gearman_worker = shift;
+
+	if (ref $class) {
+		die "Use this subroutine as a static method.";
+	}
 
 	# Arguments are thawed
 	my $args_deserialized = \%{ thaw($gearman_worker->arg) };
 
 	my $result;
-	$self->_gearman_worker($gearman_worker);	# will be used by progress()
 	eval {
-		$result = $self->run_locally($args_deserialized);
+		$result = $class->run_locally($args_deserialized, $gearman_worker);
 	};
-	$self->_gearman_worker(undef);				# clear the variable no matter how the job finished
 	if ($@) {
 		LOGDIE("$@");
 	}
@@ -499,9 +530,22 @@ sub _unique_job_id($$)
 # Returns function name (e.g. 'NinetyNineBottlesOfBeer')
 sub _function_name($)
 {
-	my $self = shift;
+	my $self_or_class = shift;
 
-	return '' . ref($self);
+	my $function_name = '';
+	if (ref($self_or_class)) {
+		# Instance
+		$function_name = '' . ref($self_or_class);
+	} else {
+		# Static
+		$function_name = $self_or_class;
+	}
+
+	if ($function_name eq 'AbstractFunction') {
+		die "Unable to determine function name.";
+	}
+
+	return $function_name;
 }
 
 # (static) Reset Log::Log4perl to write to the STDERR / STDOUT and not to file
@@ -514,12 +558,16 @@ sub _reset_log4perl()
 	});
 }
 
-# Initialize (create missing directories) and return a worker log directory path (with trailing slash)
+# (static) Initialize (create missing directories) and return a worker log directory path (with trailing slash)
 sub _init_and_return_worker_log_dir($)
 {
-	my ($self) = @_;
+	my ($class) = @_;
 
-	my $config = $self->_configuration;
+	if (ref $class) {
+		die "Use this subroutine as a static method.";
+	}
+
+	my $config = $class->_configuration;
 	my $worker_log_dir = $config->{worker_log_dir} || Sys::Path->logdir . '/gjs/';
 
     $worker_log_dir =~ s!/*$!/!;    # Add a trailing slash
@@ -541,8 +589,6 @@ no Moose;    # gets rid of scaffolding
 =head1 TODO
 
 =over 4
-
-=item * should instance variables persist between runs?
 
 =item * improve differentiation between jobs, functions, tasks, etc.
 
