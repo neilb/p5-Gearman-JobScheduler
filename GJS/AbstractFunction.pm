@@ -623,4 +623,6 @@ no Moose;    # gets rid of scaffolding
 
 =item * log job retries
 
+=item * email reports
+
 =back
