@@ -1,3 +1,24 @@
+=head1 NAME
+
+C<GJS::AbstractFunction> - An abstract class for a Gearman "function" which
+is to be derived by working Gearman "functions".
+
+
+=head1 LINGO
+
+=over 4
+
+=item * Gearman function
+
+A function to be run by Gearman or locally, e.g. C<add_default_feeds>.
+
+=item * Gearman job
+
+An instance of the Gearman function doing the actual job with specific parameters.
+
+=back
+
+=cut
 package GJS::AbstractFunction;
 
 use strict;
@@ -30,83 +51,118 @@ use constant GJS_JOB_ID_MAX_LENGTH => 256;
 use Log::Log4perl qw(:easy);
 
 
-#
-# ABSTRACT INTERFACE
-# ==================
-#
 
-# Run the job
-# -----------
-#
-# The job:
-# * accepts two parameters:
-#     * $self as the first parameter
-#     * $args (hashref) as the second parameter
-# * does not use class instance variables because their behavior is undefined
-# * returns result on success (serializable by the Storable module)
-#     * the result will be discarded if the job is ordered on Gearman as a background process
-# * provides progress reports when available:
-#     * if progress_expected() is enabled
-#     * by calling $self->progress($numerator, $denominator)
-# * die()s on error
-# * writes log to STDOUT or STDERR (preferably the latter)
+=head1 ABSTRACT INTERFACE
+
+The following subroutines must be implemented by the subclasses of this class.
+
+=head2 C<run($self, $args)>
+
+Run the job.
+
+Parameters:
+
+=over 4
+
+=item * C<$self> as the first parameter
+
+=item * (optional) C<$args> (hashref) as the second parameter
+
+=back
+
+Does not use class instance variables because their behavior is undefined.
+
+Returns result on success (serializable by the L<Storable> module):
+
+=over 4
+
+=item * the result will be discarded if the job is ordered on Gearman as a
+background process.
+
+=back
+
+Provides progress reports when available:
+
+=over 4
+
+=item * if C<progress_expected()> is enabled
+
+=item * by calling C<$self-E<gt>progress($numerator, $denominator)>
+
+=back
+
+C<die()>s on error.
+
+Writes log to C<STDOUT> or C<STDERR> (preferably the latter).
+
+=cut
 requires 'run';
 
 
-# (static) Return the timeout of each job
-# ---------------------------------------
-#
-# Returns the timeout (in seconds) of each job or 0 if there's no timeout.
+=head2 (static) C<job_timeout()>
+
+Return the timeout of each job.
+
+Returns the timeout (in seconds) of each job or 0 if there's no timeout.
+
+=cut
 requires 'job_timeout';
 
 
-# (static) Return the number of retries for each job
-# --------------------------------------------------
-#
-# Returns a number of retries each job will be attempted at.
-# Return 0 if the job should not be retried.
+=head2 (static) C<retries()>
+
+Return the number of retries for each job.
+
+Returns a number of retries each job will be attempted at. Returns 0 if the job
+should not be retried.
+
+=cut
 requires 'retries';
 
 
-# (static) Return true if the function is "unique"
-# ------------------------------------------------
-#
-# Returns true if two or more jobs with the same parameters can not be run at
-# the same and instead should be merged into one.
+=head2 (static) C<unique()>
+
+Return true if the function is "unique".
+
+Returns true if two or more jobs with the same parameters can not be run at the
+same and instead should be merged into one.
+
+=cut
 requires 'unique';
 
 
-# (static) Return true if the function's jobs are expected to provide progress
-# ----------------------------------------------------------------------------
-#
-# Returns true if the function's individual jobs are expected to provide
-# progress reports via $self->progress($numerator, $denominator).
+=head2 (static) C<progress_expected()>
+
+Return true if the function's jobs are expected to provide progress.
+
+Returns true if the function's individual jobs are expected to provide progress
+reports via C<$self-E<gt>progress($numerator, $denominator)>.
+
+=cut
 requires 'progress_expected';
 
 
 
-#
-# =========================
-# END OF ABSTRACT INTERFACE
-#
+=head1 HELPER SUBROUTINES
 
+The following subroutines can be used by the deriving class.
 
-#
-# HELPERS
-# =======
-#
+=head2 C<$self-E<gt>progress($numerator, $denominator)>
 
-# Provide progress report while running the task
-# ----------------------------------------------
-#
-# Params:
-# * $self
-# * numerator
-# * denominator
-#
-# Examples:
-# $self->progress(3, 10) -- 3 out of 10 subtasks are complete
-# $self->progress(45, 100) -- 45 out of 100 subtasks are complete (or 45% complete)
+Provide progress report while running the task (from C<run()>).
+
+Examples:
+
+=over 4
+
+=item * C<$self-E<gt>progress(3, 10)> - 3 out of 10 subtasks are complete
+
+=item * C<$self-E<gt>progress(45, 100)> - 45 out of 100 subtasks are complete
+(or 45% complete)
+
+=back
+
+=cut
 sub progress($$$)
 {
 	my ($self, $numerator, $denominator) = @_;
@@ -123,15 +179,29 @@ sub progress($$$)
 	$self->_gearman_worker->set_status($numerator, $denominator);
 }
 
-#
-# ==============
-# END OF HELPERS
-#
 
 
-# Run locally and right away, blocking the parent process while it gets finished
-# (issued either by the original caller or the Gearman worker)
-# Returns result (may be false of undef) on success, die()s on error
+=head1 CLIENT SUBROUTINES
+
+The following subroutines can be used by "clients" in order to issue a Gearman
+function.
+
+=head2 C<$instance-E<gt>run_locally($args)>
+
+Run locally and right away, blocking the parent process until it gets finished.
+
+Parameters:
+
+=over 4
+
+=item * (optional) C<$args> (hashref) as the second parameter (serializable by the
+L<Storable> module)
+
+=back
+
+Returns result (may be false of C<undef>) on success, C<die()>s on error
+
+=cut
 sub run_locally($;$)
 {
 	my $self = shift;
@@ -217,10 +287,24 @@ sub run_locally($;$)
 	return $result;
 }
 
-# Run on Gearman, wait for the task to complete, return the result;
-# block the process until the job is complete
-# (issued by the original caller)
-# Returns job's result on success, die()s on error
+
+=head2 C<$instance-E<gt>run_on_gearman($args)>
+
+Run on Gearman, wait for the task to complete, return the result; block the
+process until the job is complete.
+
+Parameters:
+
+=over 4
+
+=item * (optional) C<$args> (hashref) as the second parameter (serializable by the
+L<Storable> module)
+
+=back
+
+Returns result (may be false of C<undef>) on success, C<die()>s on error
+
+=cut
 sub run_on_gearman($;$)
 {
 	my $self = shift;
@@ -246,10 +330,24 @@ sub run_on_gearman($;$)
 }
 
 
-# Enqueue on Gearman, do not wait for the task to complete, return immediately;
-# do not block the process until the job is complete
-# (issued by the original caller)
-# Returns Gearman-provided job identifier if job was enqueued successfully, die()s on error
+=head2 C<$instance-E<gt>enqueue_on_gearman($args)>
+
+Enqueue on Gearman, do not wait for the task to complete, return immediately;
+do not block the parent process until the job is complete.
+
+Parameters:
+
+=over 4
+
+=item * (optional) C<$args> (hashref) as the second parameter (serializable by the
+L<Storable> module)
+
+=back
+
+Returns Gearman-provided string job identifier if the job was enqueued
+successfully, C<die()>s on error.
+
+=cut
 sub enqueue_on_gearman($;$)
 {
 	my $self = shift;
@@ -439,3 +537,15 @@ sub _init_and_return_worker_log_dir($)
 no Moose;    # gets rid of scaffolding
 
 1;
+
+=head1 TODO
+
+=over 4
+
+=item * should instance variables persist between runs?
+
+=item * improve differentiation between jobs, functions, tasks, etc.
+
+=item * progress reports
+
+=back
