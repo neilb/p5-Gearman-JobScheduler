@@ -548,4 +548,6 @@ no Moose;    # gets rid of scaffolding
 
 =item * progress reports
 
+=item * write different functions' logs to different subdirs
+
 =back
