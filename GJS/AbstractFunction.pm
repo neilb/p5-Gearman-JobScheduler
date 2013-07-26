@@ -42,6 +42,7 @@ use Log::Log4perl qw(:easy);
 # * accepts two parameters:
 #     * $self as the first parameter
 #     * $args (hashref) as the second parameter
+# * does not use class instance variables because their behavior is undefined
 # * returns result on success (serializable by the Storable module)
 #     * the result will be discarded if the job is ordered on Gearman as a background process
 # * provides progress reports when available:
