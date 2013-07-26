@@ -175,6 +175,7 @@ sub progress($$$)
 		die "Denominator is 0.";
 	}
 
+	# Written to job's log
 	say STDERR "$numerator/$denominator complete.";
 
 	$self->_gearman_worker->set_status($numerator, $denominator);
@@ -273,7 +274,7 @@ sub run_locally($;$$)
 		};
 	    if ( $@ )
 	    {
-	        die "Job died: $@";
+	        die "Job \"$job_id\" died: $@";
 	    }
 
 	    my $end = Time::HiRes::gettimeofday();
@@ -286,16 +287,23 @@ sub run_locally($;$$)
 	};
 
 	my $error = $@;
+	if ($error) {
+		# Write to job's log
+		say STDERR "$error";
+	}
 
 	# Untie STDOUT / STDERR from Log4perl
     untie *STDERR;
     untie *STDOUT;
 
 	_reset_log4perl();
-	INFO($finished_job_message);
+	if ($finished_job_message) {
+		INFO($finished_job_message);
+	}
 
     if ( $error )
     {
+    	# Print out to worker's STDERR and die()
     	LOGDIE("$error");
     }
 
@@ -441,10 +449,25 @@ sub _gearman_task_from_args($$;$)
 
 	my $task = Gearman::Task->new($function_name, \$args_serialized, {
 		uniq => $class->unique,
-		on_complete => sub { say STDERR "Complete!" },
-		on_fail => sub { say STDERR "Failed for the last time" },
-		on_retry => sub { say STDERR "Retry" },
-		on_status => sub { say STDERR "Status" },
+		on_complete => sub {
+			# run_on_gearman() sees this
+			my ($result_ref) = @_;
+			say STDERR "Gearman job completed.";
+		},
+		on_fail => sub {
+			# run_on_gearman() sees this
+			say STDERR "Gearman job is out of retries, giving up.";
+		},
+		on_retry => sub {
+			# run_on_gearman() sees this
+			my ($retry_num) = @_;
+			say STDERR "Gearman job failed, retrying #$retry_num...";
+		},
+		on_status => sub {
+			# run_on_gearman() sees this
+			my ($numerator, $denominator) = @_;
+			say STDERR "Gearman job is $numerator/$denominator complete.";
+		},
 		retry_count => $class->retries,
 		try_timeout => $class->job_timeout,
 	});
@@ -468,7 +491,7 @@ sub _run_locally_from_gearman_worker($;$)
 	my $gearman_worker = shift;
 
 	if (ref $class) {
-		die "Use this subroutine as a static method.";
+		LOGDIE("Use this subroutine as a static method.");
 	}
 
 	# Arguments are thawed
@@ -479,7 +502,7 @@ sub _run_locally_from_gearman_worker($;$)
 		$result = $class->run_locally($args_deserialized, $gearman_worker);
 	};
 	if ($@) {
-		LOGDIE("$@");
+		LOGDIE("Gearman job died: $@");
 	}
 
 	# Serialize result because it's going to be passed over Gearman
@@ -490,7 +513,7 @@ sub _run_locally_from_gearman_worker($;$)
 	$result_deserialized = $$result_deserialized;
 	# say STDERR "Deserialized result: " . Dumper($result_deserialized);
 	unless (Compare($result, $result_deserialized)) {
-		die "Serialized and deserialized results differ.";
+		LOGDIE("Serialized and deserialized results differ");
 	}
 
 	return $result_serialized;
@@ -597,5 +620,7 @@ no Moose;    # gets rid of scaffolding
 =item * improve differentiation between jobs, functions, tasks, etc.
 
 =item * progress reports
+
+=item * log job retries
 
 =back

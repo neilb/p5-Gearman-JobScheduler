@@ -60,7 +60,17 @@ sub main()
     $worker->job_servers(@{$config->{servers}});
 
 	$worker->register_function($gearman_function_name, sub {
-		$gearman_function_name->_run_locally_from_gearman_worker($_[0]);
+		my ($gearman_job) = shift;
+
+		my $result;
+		eval {
+			$result = $gearman_function_name->_run_locally_from_gearman_worker($gearman_job);
+		};
+		if ($@) {
+			LOGDIE("Gearman job with handle '{$gearman_job->{handle}}' died: $@");
+		}
+
+		return $result;
 	});
 
     INFO("Worker is ready and accepting jobs");
