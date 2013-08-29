@@ -221,17 +221,30 @@ sub run_locally($;$$)
 	}
 
 	my $function_name = $class->_function_name();
-	my $job_id = _unique_job_id($function_name, $args);
-	unless ($job_id) {
-		die "Unable to determine unique job ID";
+	my $gjs_job_id;
+	if ($gearman_worker) {
+		unless (defined $args->{_gjs_job_id}) {
+			die "I've expected that GJS job ID will be pre-generated because this request comes from Gearman.";
+		}
+		$gjs_job_id = $args->{_gjs_job_id};
+		delete $args->{_gjs_job_id};
+	} else {
+		$gjs_job_id = _unique_job_id($function_name, $args);
+	}
+	unless ($gjs_job_id) {
+		die "Unable to determine unique GJS job ID";
 	}
 
-	my $log_path = $class->_init_and_return_worker_log_dir($function_name) . $job_id . '.log';
+	my $log_path = $class->_init_and_return_worker_log_dir($function_name) . $gjs_job_id . '.log';
+	my $starting_job_message;
 	if ( -f $log_path ) {
-		die "Worker log already exists at path '$log_path'.";
+		# Worker crashed last time and now tries to write to the same log path
+		# (will overwrite the log)
+		$starting_job_message = "Restarting job ID \"$gjs_job_id\", logging to \"$log_path\" ...";
+	} else {
+		$starting_job_message = "Starting job ID \"$gjs_job_id\", logging to \"$log_path\" ...";
 	}
 
-	my $starting_job_message = "Starting job ID \"$job_id\", logging to \"$log_path\" ...";
 	my $finished_job_message;
 
 	_reset_log4perl();
@@ -274,14 +287,14 @@ sub run_locally($;$$)
 		};
 	    if ( $@ )
 	    {
-	        die "Job \"$job_id\" died: $@";
+	        die "Job \"$gjs_job_id\" died: $@";
 	    }
 
 	    my $end = Time::HiRes::gettimeofday();
 
 		say STDERR "";
 		say STDERR "========";
-		$finished_job_message = "Finished job ID \"$job_id\" in " . sprintf("%.2f", $end - $start) . " seconds";
+		$finished_job_message = "Finished job ID \"$gjs_job_id\" in " . sprintf("%.2f", $end - $start) . " seconds";
 	    say STDERR $finished_job_message;
 
 	};
@@ -342,7 +355,7 @@ sub run_on_gearman($;$)
 	my $client = Gearman::Client->new;
 	$client->job_servers(@{$config->{servers}});
 
-	my $task = $class->_gearman_task_from_args($config, $args);
+	my ($task, $gjs_job_id) = $class->_gearman_task_from_args($config, $args);
 	my $result_ref = $client->do_task($task);
     # say STDERR "Serialized result: " . Dumper($result_ref);
 
@@ -371,8 +384,8 @@ function (serializable by the L<Storable> module)
 
 =back
 
-Returns Gearman-provided string job identifier if the job was enqueued
-successfully, C<die()>s on error.
+Returns Gearman-provided string job identifier (Gearman job ID) if the job was
+enqueued successfully, C<die()>s on error.
 
 =cut
 sub enqueue_on_gearman($;$)
@@ -387,14 +400,21 @@ sub enqueue_on_gearman($;$)
 	my $config = GJS->_configuration;
 	my $client = GJS->_gearman_client;
 
-	my $task = $class->_gearman_task_from_args($config, $args);
-	my $job_id = $client->dispatch_background($task);
-    
-	return $job_id;
+	my ($task, $gjs_job_id) = $class->_gearman_task_from_args($config, $args);
+
+	my $gearman_job_id = $client->dispatch_background($task);
+
+	# Register Gearman job ID => GJS job ID mapping to that it would be possible to find logs of
+	# the job afterwards
+	say STDERR "Enqueued job '$gjs_job_id' (Gearman ID: $gearman_job_id) on Gearman";
+	GJS->_register_job_id($gearman_job_id, $gjs_job_id);
+
+	return $gearman_job_id;
 }
 
 # (static) Validate the job arguments, create Gearman task from parameters or die on error
-sub _gearman_task_from_args($$;$)
+# Returns: instance of Gearman::Task; GJS job ID
+sub _gearman_task_from_args($$$;$)
 {
 	my $class = shift;
 	my $config = shift;
@@ -412,6 +432,11 @@ sub _gearman_task_from_args($$;$)
 	unless ($function_name) {
 		die "Unable to determine function name.";
 	}
+
+	# Think up the GJS job ID at this point because it is going to be
+	# used and logged in enqueue_on_gearman()
+	my $gjs_job_id = _unique_job_id($function_name, $args);
+	$args->{_gjs_job_id} = $gjs_job_id;
 
 	# Gearman accepts only scalar arguments
 	my $args_serialized = undef;
@@ -455,7 +480,7 @@ sub _gearman_task_from_args($$;$)
 		try_timeout => $class->job_timeout,
 	});
 
-	return $task;
+	return ($task, $gjs_job_id);
 }
 
 
@@ -521,15 +546,15 @@ sub _unique_job_id($$)
 		: '';
 
 	# UUID goes first in case the job name shortener decides to cut out a part of the job ID
-	my $job_id = "$uuid.$function_name($job_args)";
-	if (length ($job_id) > GJS_JOB_ID_MAX_LENGTH) {
-		$job_id = substr($job_id, 0, GJS_JOB_ID_MAX_LENGTH);
+	my $gjs_job_id = "$uuid.$function_name($job_args)";
+	if (length ($gjs_job_id) > GJS_JOB_ID_MAX_LENGTH) {
+		$gjs_job_id = substr($gjs_job_id, 0, GJS_JOB_ID_MAX_LENGTH);
 	}
 
 	# Sanitize path
-	$job_id =~ s/[^a-zA-Z0-9\.\-_\(\)=,]/_/gi;
+	$gjs_job_id =~ s/[^a-zA-Z0-9\.\-_\(\)=,]/_/gi;
 
-	return $job_id;
+	return $gjs_job_id;
 }
 
 
