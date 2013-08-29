@@ -621,8 +621,26 @@ no Moose;    # gets rid of scaffolding
 
 =item * progress reports
 
-=item * log job retries
+=item * transactions before running jobs
 
-=item * email reports
+=item * Proper logging of job's retries. Now if a job has to be retried because
+it has failed, it is being logged to a separate log file. This is not elegant
+and doesn't make much sense.
+
+=item * Figure out how to identify individual jobs (e.g.
+add_default_feeds({media_id=1234})) on the web interface so that one can see
+their status and completion.
+
+=item * Email reports about failed function runs
+
+=item * Script to run all workers at the same time
+
+=item * (Maybe) Put the argument list as the first line of the log file
+(argument list is truncated, sanitized and is there for the display purposes,
+so maybe it wouldn't be that bad to leave it there.
+
+=item * Make an infrastructure to query currently running jobs: e.g.
+run_on_gearman returns some sort of an ID which is queryable through a helper
+function to get the path of the log file and whatnot.
 
 =back
