@@ -27,6 +27,7 @@ use Modern::Perl "2012";
 
 use Moose::Role;
 
+use GJS;
 use GJS::ErrorLogTrapper;
 
 use IO::File;
@@ -37,13 +38,11 @@ use Data::UUID;
 use Gearman::Client;
 use Gearman::Task;
 use Gearman::Worker;
-use YAML qw(LoadFile);
 use Storable qw(freeze thaw);
 use Data::Compare;
 use Sys::Path;
 use File::Path qw(make_path);
 
-use constant GJS_CONFIG_FILE => 'config.yml';
 use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
 # used for capturing STDOUT and STDERR output of each job and timestamping it;
@@ -144,7 +143,7 @@ requires 'progress_expected';
 
 The following subroutines can be used by the deriving class.
 
-=head2 C<$self-E<gt>progress($numerator, $denominator)>
+=head2 C<$self-E<gt>set_progress($numerator, $denominator)>
 
 Provide progress report while running the task (from C<run()>).
 
@@ -152,7 +151,7 @@ Examples:
 
 =over 4
 
-=item * C<$self-E<gt>progress(3, 10)>
+=item * C<$self-E<gt>set_progress(3, 10)>
 
 3 out of 10 subtasks are complete.
 
@@ -163,12 +162,13 @@ Examples:
 =back
 
 =cut
-sub progress($$$)
+sub set_progress($$$)
 {
 	my ($self, $numerator, $denominator) = @_;
 
 	unless (defined $self->_gearman_worker) {
 		# Running the job locally, Gearman doesn't have anything to do with this run
+		say STDERR "Gearman worker is nil";
 		return;
 	}
 	unless ($denominator) {
@@ -337,7 +337,7 @@ sub run_on_gearman($;$)
 		die "Use this subroutine as a static method, e.g. MyGearmanFunction->run_on_gearman()";
 	}
 
-	my $config = $class->_configuration;
+	my $config = GJS->_configuration;
 
 	my $client = Gearman::Client->new;
 	$client->job_servers(@{$config->{servers}});
@@ -384,31 +384,14 @@ sub enqueue_on_gearman($;$)
 		die "Use this subroutine as a static method, e.g. MyGearmanFunction->enqueue_on_gearman()";
 	}
 
-	my $config = $class->_configuration;
-
-	my $client = Gearman::Client->new;
-	$client->job_servers(@{$config->{servers}});
+	my $config = GJS->_configuration;
+	my $client = GJS->_gearman_client;
 
 	my $task = $class->_gearman_task_from_args($config, $args);
 	my $job_id = $client->dispatch_background($task);
     
 	return $job_id;
 }
-
-
-# (static) Return configuration, die() on error
-sub _configuration($)
-{
-	my $class = shift;
-
-	my $config = LoadFile(GJS_CONFIG_FILE) or LOGDIE("Unable to read configuration from '" . GJS_CONFIG_FILE . "': $!");
-	unless (scalar (@{$config->{servers}})) {
-		die "No servers are configured.";
-	}
-
-	return $config;	
-}
-
 
 # (static) Validate the job arguments, create Gearman task from parameters or die on error
 sub _gearman_task_from_args($$;$)
@@ -590,7 +573,7 @@ sub _init_and_return_worker_log_dir($$)
 		die "Use this subroutine as a static method.";
 	}
 
-	my $config = $class->_configuration;
+	my $config = GJS->_configuration;
 	my $worker_log_dir = $config->{worker_log_dir} || Sys::Path->logdir . '/gjs/';
 
 	# Add a trailing slash

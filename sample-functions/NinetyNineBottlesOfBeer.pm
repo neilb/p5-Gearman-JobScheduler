@@ -32,7 +32,7 @@ sub run($;$)
 	    say STDERR "Take one down, pass it around,";
 	    say STDERR $_ - 1, " bottle${oneLessS} of beer on the wall";
 
-	    $self->progress(($how_many_bottles - $_ + 1), $how_many_bottles);
+	    $self->set_progress(($how_many_bottles - $_ + 1), $how_many_bottles);
 
 	    usleep(SLEEP_BETWEEN_BOTTLES);
 	}
