@@ -95,6 +95,8 @@ sub get_gearman_status($$)
 
 (Attempt to) cancel a Gearman job.
 
+(None: the job has to be queued and not running.)
+
 Parameters:
 
 =over 4
