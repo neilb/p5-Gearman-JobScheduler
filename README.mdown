@@ -76,13 +76,13 @@ reports via `$self->progress($numerator, $denominator)`.
 
 The following subroutines can be used by the deriving class.
 
-## `$self->progress($numerator, $denominator)`
+## `$self->set_progress($numerator, $denominator)`
 
 Provide progress report while running the task (from `run()`).
 
 Examples:
 
-- `$self->progress(3, 10)`
+- `$self->set_progress(3, 10)`
 
     3 out of 10 subtasks are complete.
 
@@ -128,8 +128,8 @@ Parameters:
 - (optional) `$args` (hashref), arguments needed for running the Gearman
 function (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
 
-Returns Gearman-provided string job identifier if the job was enqueued
-successfully, `die()`s on error.
+Returns Gearman-provided string job identifier (Gearman job ID) if the job was
+enqueued successfully, `die()`s on error.
 
 # TODO
 
