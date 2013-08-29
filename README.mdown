@@ -39,7 +39,7 @@ will be discarded if the job is ordered on Gearman as a background process.
 Provides progress reports when available:
 
 - if `progress_expected()` is enabled
-- by calling `$self->progress($numerator, $denominator)`
+- by calling `$self->set_progress($numerator, $denominator)`
 
 `die()`s on error.
 
@@ -70,7 +70,7 @@ same and instead should be merged into one.
 Return true if the function's jobs are expected to provide progress.
 
 Returns true if the function's individual jobs are expected to provide progress
-reports via `$self->progress($numerator, $denominator)`.
+reports via `$self->set_progress($numerator, $denominator)`.
 
 # HELPER SUBROUTINES
 
@@ -86,7 +86,7 @@ Examples:
 
     3 out of 10 subtasks are complete.
 
-- `$self->progress(45, 100)`
+- `$self->set_progress(45, 100)`
 
     45 out of 100 subtasks are complete (or 45% complete).
 

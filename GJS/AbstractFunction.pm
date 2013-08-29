@@ -83,7 +83,7 @@ Provides progress reports when available:
 
 =item * if C<progress_expected()> is enabled
 
-=item * by calling C<$self-E<gt>progress($numerator, $denominator)>
+=item * by calling C<$self-E<gt>set_progress($numerator, $denominator)>
 
 =back
 
@@ -132,7 +132,7 @@ requires 'unique';
 Return true if the function's jobs are expected to provide progress.
 
 Returns true if the function's individual jobs are expected to provide progress
-reports via C<$self-E<gt>progress($numerator, $denominator)>.
+reports via C<$self-E<gt>set_progress($numerator, $denominator)>.
 
 =cut
 requires 'progress_expected';
@@ -155,7 +155,7 @@ Examples:
 
 3 out of 10 subtasks are complete.
 
-=item * C<$self-E<gt>progress(45, 100)>
+=item * C<$self-E<gt>set_progress(45, 100)>
 
 45 out of 100 subtasks are complete (or 45% complete).
 
@@ -486,7 +486,7 @@ sub _gearman_task_from_args($$$;$)
 
 # _run_locally_from_gearman_worker() will pass this parameter to run_locally()
 # which in turn will temporarily place a Gearman worker to this variable so
-# that progress() helper can use it
+# that set_progress() helper can use it
 has '_gearman_worker' => ( is => 'rw' );
 
 
