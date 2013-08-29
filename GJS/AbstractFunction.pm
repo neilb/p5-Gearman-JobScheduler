@@ -629,8 +629,6 @@ no Moose;    # gets rid of scaffolding
 
 =item * progress reports
 
-=item * transactions before running jobs
-
 =item * Proper logging of job's retries. Now if a job has to be retried because
 it has failed, it is being logged to a separate log file. This is not elegant
 and doesn't make much sense.
