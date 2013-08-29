@@ -30,13 +30,16 @@ sub main()
 	# $result = AdditionAlwaysFails->run_on_gearman({a => 2, b => 3});
 
 	say STDERR "Result: $result";
-	say STDERR "GJS job ID: " . GJS->gjs_job_id_for_gearman_job_id($result);
+	my $gjs_job_id = GJS->gjs_job_id_for_gearman_job_id($result);
+	say STDERR "GJS job ID: $gjs_job_id";
 
 	my $status;
 
 	sleep(1);
 	$status = GJS->get_gearman_status($result);
 	say STDERR "Status: " . Dumper($status);
+
+	GJS->cancel_gearman_job($result);
 
 	sleep(3);
 	$status = GJS->get_gearman_status($result);

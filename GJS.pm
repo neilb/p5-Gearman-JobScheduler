@@ -12,6 +12,10 @@ use warnings;
 use Modern::Perl "2012";
 
 use Gearman::Client;
+use IO::Socket::INET;
+
+# flush sockets after every write
+$| = 1;
 
 use constant GJS_CONFIG_FILE => 'config.yml';
 
@@ -85,6 +89,62 @@ sub get_gearman_status($$)
 		'denominator' => int($status->[3])
 	};
 	return $response;
+}
+
+=head2 (static) C<cancel_gearman_job($gearman_job_id)>
+
+(Attempt to) cancel a Gearman job.
+
+Parameters:
+
+=over 4
+
+=item * Gearman job ID (e.g. "127.0.0.1:4730//H:localhost.localdomain:8")
+
+=back
+
+Returns 1 if cancelling was successful, 0 otherwise.
+
+die()s on error.
+
+=cut
+sub cancel_gearman_job($$)
+{
+	my $class = shift;
+	my $gearman_job_id = shift;
+
+	if (ref $class) {
+		die "Use this subroutine as a static method, e.g. GJS->cancel_gearman_job()";
+	}
+
+	# Neither Gearman::Client nor Gearman::XS::Client provides a helper
+	# subroutine to do this, so we'll have to do this the old way
+
+	my ($server, $internal_job_id) = split('//', $gearman_job_id);
+	my ($host, $port) = split(':', $server);
+
+	$port ||= 4730;
+	$port = int($port);
+
+	my $socket = new IO::Socket::INET (
+	    PeerHost => $host,
+	    PeerPort => $port,
+	    Proto => 'tcp',
+	) or die "Unable to connect to Gearman server: $!\n";
+
+	$socket->send("cancel job " . $internal_job_id . "\r\n");
+
+	my $response = "";
+	$socket->recv($response, 1024);
+	if ($response ne "OK\r\n") {
+		say STDERR "Unable to cancel Gearman job $gearman_job_id";
+		$socket->close();
+		return 0;
+	}
+
+	$socket->close();
+
+	return 1;
 }
 
 =head2 (static) C<gearman_job_id_for_gjs_job_id($gjs_job_id)>
