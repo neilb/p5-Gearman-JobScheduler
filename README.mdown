@@ -135,10 +135,7 @@ enqueued successfully, `die()`s on error.
 
 - improve differentiation between jobs, functions, tasks, etc.
 - progress reports
-- transactions before running jobs
-- Proper logging of job's retries. Now if a job has to be retried because
-it has failed, it is being logged to a separate log file. This is not elegant
-and doesn't make much sense.
+- proper support of retrying (Perl's Gearman module doesn't support it)
 - Figure out how to identify individual jobs (e.g.
 add\_default\_feeds({media\_id=1234})) on the web interface so that one can see
 their status and completion.
