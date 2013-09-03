@@ -238,7 +238,7 @@ sub run_locally($;$$)
 	my $starting_job_message;
 	if ( -f $log_path ) {
 		# Worker crashed last time and now tries to write to the same log path
-		# (will overwrite the log)
+		# (will append to the log)
 		$starting_job_message = "Restarting job ID \"$gjs_job_id\", logging to \"$log_path\" ...";
 	} else {
 		$starting_job_message = "Starting job ID \"$gjs_job_id\", logging to \"$log_path\" ...";
@@ -252,7 +252,7 @@ sub run_locally($;$$)
 	Log::Log4perl->easy_init({
 		level => $DEBUG,
 		utf8=>1,
-		file => $log_path,	# do not use STDERR / STDOUT here because it would end up with recursion
+		file => ">>$log_path",	# do not use STDERR / STDOUT here because it would end up with recursion
 		layout => "%d{ISO8601} [%P]: %m"
 	});
 
@@ -663,10 +663,6 @@ no Moose;    # gets rid of scaffolding
 =item * improve differentiation between jobs, functions, tasks, etc.
 
 =item * progress reports
-
-=item * Proper logging of job's retries. Now if a job has to be retried because
-it has failed, it is being logged to a separate log file. This is not elegant
-and doesn't make much sense.
 
 =item * Figure out how to identify individual jobs (e.g.
 add_default_feeds({media_id=1234})) on the web interface so that one can see
