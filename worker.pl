@@ -58,16 +58,18 @@ sub main()
 
 	my $worker = Gearman::Worker->new;
     $worker->job_servers(@{$config->{servers}});
+    $worker->debug(1);
 
-	$worker->register_function($gearman_function_name, sub {
+	$worker->register_function($gearman_function_name => sub {
 		my ($gearman_job) = shift;
 
+		my $job_handle = $gearman_job->{handle};
 		my $result;
 		eval {
 			$result = $gearman_function_name->_run_locally_from_gearman_worker($gearman_job);
 		};
 		if ($@) {
-			LOGDIE("Gearman job with handle '{$gearman_job->{handle}}' died: $@");
+			LOGDIE("Gearman job with handle '$job_handle' died: $@");
 		}
 
 		return $result;
