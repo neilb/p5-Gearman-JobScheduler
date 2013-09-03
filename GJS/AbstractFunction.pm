@@ -483,7 +483,7 @@ has '_gearman_worker' => ( is => 'rw' );
 
 
 # Run locally and right away, blocking the parent process while it gets finished
-# (issued either by the Gearman worker)
+# (issued by the Gearman worker)
 # Returns result (may be false of undef) on success, die()s on error
 sub _run_locally_from_gearman_worker($;$)
 {
