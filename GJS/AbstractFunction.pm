@@ -223,11 +223,10 @@ sub run_locally($;$$)
 	my $function_name = $class->_function_name();
 	my $gjs_job_id;
 	if ($gearman_worker) {
-		unless (defined $args->{_gjs_job_id}) {
-			die "I've expected that GJS job ID will be pre-generated because this request comes from Gearman.";
+		unless (defined $gearman_worker->{handle}) {
+			die "Unable to find a Gearman job ID to be used for logging";
 		}
-		$gjs_job_id = $args->{_gjs_job_id};
-		delete $args->{_gjs_job_id};
+		$gjs_job_id = _unique_job_id($function_name, $args, $gearman_worker->{handle});
 	} else {
 		$gjs_job_id = _unique_job_id($function_name, $args);
 	}
@@ -302,7 +301,7 @@ sub run_locally($;$$)
 	my $error = $@;
 	if ($error) {
 		# Write to job's log
-		say STDERR "$error";
+		say STDERR "Job died: $error";
 	}
 
 	# Untie STDOUT / STDERR from Log4perl
@@ -355,7 +354,7 @@ sub run_on_gearman($;$)
 	my $client = Gearman::Client->new;
 	$client->job_servers(@{$config->{servers}});
 
-	my ($task, $gjs_job_id) = $class->_gearman_task_from_args($config, $args);
+	my $task = $class->_gearman_task_from_args($config, $args);
 	my $result_ref = $client->do_task($task);
     # say STDERR "Serialized result: " . Dumper($result_ref);
 
@@ -400,20 +399,18 @@ sub enqueue_on_gearman($;$)
 	my $config = GJS->_configuration;
 	my $client = GJS->_gearman_client;
 
-	my ($task, $gjs_job_id) = $class->_gearman_task_from_args($config, $args);
+	my $task = $class->_gearman_task_from_args($config, $args);
 
 	my $gearman_job_id = $client->dispatch_background($task);
 
-	# Register Gearman job ID => GJS job ID mapping to that it would be possible to find logs of
-	# the job afterwards
-	say STDERR "Enqueued job '$gjs_job_id' (Gearman ID: $gearman_job_id) on Gearman";
-	GJS->_register_job_id($gearman_job_id, $gjs_job_id);
+	say STDERR "Enqueued job '$gearman_job_id' on Gearman";
 
 	return $gearman_job_id;
 }
 
 # (static) Validate the job arguments, create Gearman task from parameters or die on error
-# Returns: instance of Gearman::Task; GJS job ID
+# Returns: instance of Gearman::Task
+# die()s on error
 sub _gearman_task_from_args($$$;$)
 {
 	my $class = shift;
@@ -432,11 +429,6 @@ sub _gearman_task_from_args($$$;$)
 	unless ($function_name) {
 		die "Unable to determine function name.";
 	}
-
-	# Think up the GJS job ID at this point because it is going to be
-	# used and logged in enqueue_on_gearman()
-	my $gjs_job_id = _unique_job_id($function_name, $args);
-	$args->{_gjs_job_id} = $gjs_job_id;
 
 	# Gearman accepts only scalar arguments
 	my $args_serialized = undef;
@@ -480,7 +472,7 @@ sub _gearman_task_from_args($$$;$)
 		try_timeout => $class->job_timeout,
 	});
 
-	return ($task, $gjs_job_id);
+	return $task;
 }
 
 
@@ -527,18 +519,61 @@ sub _run_locally_from_gearman_worker($;$)
 	return $result_serialized;
 }
 
-# (static) Return an unique, safe job name which is suitable for writing to the filesystem
-sub _unique_job_id($$)
+# (static) Return an unique, path-safe job name which is suitable for writing
+# to the filesystem
+#
+# Parameters:
+# * Gearman function name, e.g. 'NinetyNineBottlesOfBeer'
+# * hashref of job arguments, e.g. "{ 'how_many_bottles' => 13 }"
+# * (optional) Gearman job ID, e.g.:
+#     * "H:tundra.home:18" (as reported by an instance of Gearman::Job), or
+#     * "127.0.0.1:4730//H:tundra.home:18" (as reported by gearmand)
+#
+# Returns: unique job ID, e.g.:
+# * "084567C4146F11E38F00CB951DB7256D.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)", or
+# * "H_tundra.home_18.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
+sub _unique_job_id($$;$)
 {
-	my ($function_name, $job_args) = @_;
-
-	my $ug    = new Data::UUID;
-	my $uuid = $ug->create_str();	# e.g. 059303A4-F3F1-11E2-9246-FB1713B42706
-	$uuid =~ s/\-//gs;				# e.g. 059303A4F3F111E29246FB1713B42706
+	my ($function_name, $job_args, $gearman_job_id) = @_;
 
 	unless ($function_name) {
 		return undef;
 	}
+
+	my $unique_id;
+	if ($gearman_job_id) {
+
+		# If Gearman job ID was passed as a parameter, this means that the job
+		# was run by Gearman (by running run_on_gearman() or enqueue_on_gearman()).
+		# Thus, the job has to be logged to a location that can later be found
+		# by knowing the Gearman job ID.
+
+		# Strip the host part (if present)
+		if (index($gearman_job_id, '//') != -1) {
+			my ($server, $internal_job_id) = split('//', $gearman_job_id);
+			$gearman_job_id = $internal_job_id;
+		}
+
+		unless ($gearman_job_id =~ /^H:.+?:\d+?$/) {
+			die "Invalid Gearman job ID: $gearman_job_id";
+		}
+
+		$unique_id = $gearman_job_id;
+
+	} else {
+
+		# If no Gearman job ID was provided, this means that the job is being
+		# run locally.
+		# The job's output still has to be logged somewhere, so we generate an
+		# UUID to serve in place of Gearman job ID.
+
+		my $ug    = new Data::UUID;
+		my $uuid = $ug->create_str();	# e.g. "059303A4-F3F1-11E2-9246-FB1713B42706"
+		$uuid =~ s/\-//gs;				# e.g. "059303A4F3F111E29246FB1713B42706"
+
+		$unique_id = $uuid;		
+	}
+
 
 	# Convert to string
 	$job_args = ($job_args and scalar keys $job_args)
@@ -546,12 +581,12 @@ sub _unique_job_id($$)
 		: '';
 
 	# UUID goes first in case the job name shortener decides to cut out a part of the job ID
-	my $gjs_job_id = "$uuid.$function_name($job_args)";
+	my $gjs_job_id = "$unique_id.$function_name($job_args)";
 	if (length ($gjs_job_id) > GJS_JOB_ID_MAX_LENGTH) {
 		$gjs_job_id = substr($gjs_job_id, 0, GJS_JOB_ID_MAX_LENGTH);
 	}
 
-	# Sanitize path
+	# Sanitize for paths
 	$gjs_job_id =~ s/[^a-zA-Z0-9\.\-_\(\)=,]/_/gi;
 
 	return $gjs_job_id;

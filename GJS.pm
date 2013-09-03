@@ -20,16 +20,6 @@ $| = 1;
 use constant GJS_CONFIG_FILE => 'config.yml';
 
 
-# Gearman job ID => GJS job ID mapping
-#
-# E.g.:
-# {
-# 	"127.0.0.1:4730//H:tundra.home:7" => "3F44724010DE11E396642DF6156E4EC6.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)",
-# 	"127.0.0.1:4730//H:tundra.home:8" => "BACF73BA10DE11E396642DF6156E4EC6.NinetyNineBottlesOfBeer(how_many_bottles_=_100)",
-# 	...
-# }
-my %_gearman_gjs_job_ids;
-
 
 =head2 (static) C<get_gearman_status($gearman_job_id)>
 
@@ -147,70 +137,6 @@ sub cancel_gearman_job($$)
 	$socket->close();
 
 	return 1;
-}
-
-=head2 (static) C<gearman_job_id_for_gjs_job_id($gjs_job_id)>
-
-Get Gearman job ID for GJS job ID.
-
-(Note: GJS job IDs will be kept in memory only as long as the GJS class is loaded.)
-
-Parameters:
-
-=over 4
-
-=item * Gearman job ID (e.g. "127.0.0.1:4730//H:localhost.localdomain:8")
-
-=back
-
-Returns GJS job ID (e.g. "E1E07D1C10E511E38756ACFE156E4EC6.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)")
-
-Returns undef if the job ID was not found.
-
-=cut
-sub gearman_job_id_for_gjs_job_id($$)
-{
-	my $class = shift;
-	my $gjs_job_id = shift;
-
-	my ($gearman_job_id) = grep { $_gearman_gjs_job_ids{$_} eq $gjs_job_id } keys %_gearman_gjs_job_ids;
-	return $gearman_job_id;
-}
-
-=head2 (static) C<gjs_job_id_for_gearman_job_id($gearman_job_id)>
-
-Get GJS job ID for Gearman job ID.
-
-(Note: GJS job IDs will be kept in memory only as long as the GJS class is loaded.)
-
-Parameters:
-
-=over 4
-
-=item * GJS job ID (e.g. "E1E07D1C10E511E38756ACFE156E4EC6.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)")
-
-=back
-
-Returns Gearman job ID (e.g. "127.0.0.1:4730//H:localhost.localdomain:8")
-
-Returns undef if the job ID was not found.
-
-=cut
-sub gjs_job_id_for_gearman_job_id($$)
-{
-	my $class = shift;
-	my $gearman_job_id = shift;
-
-	return $_gearman_gjs_job_ids{$gearman_job_id};
-}
-
-
-sub _register_job_id($$$)
-{
-	my $class = shift;
-	my ($gearman_job_id, $gjs_job_id) = @_;
-
-	$_gearman_gjs_job_ids{$gearman_job_id} = $gjs_job_id;
 }
 
 # Create and return a configured instance of Gearman::Client
