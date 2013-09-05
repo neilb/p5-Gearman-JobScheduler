@@ -38,10 +38,14 @@ use Data::UUID;
 use Gearman::Client;
 use Gearman::Task;
 use Gearman::Worker;
-use Storable qw(freeze thaw);
 use Data::Compare;
 use Sys::Path;
 use File::Path qw(make_path);
+
+use Storable qw(freeze thaw);
+# serialize hashes with the same key order:
+$Storable::canonical = 1;
+
 
 use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
