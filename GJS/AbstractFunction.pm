@@ -664,6 +664,8 @@ no Moose;    # gets rid of scaffolding
 
 =item * progress reports
 
+=item * proper support of retrying (Perl's Gearman module doesn't support it)
+
 =item * Figure out how to identify individual jobs (e.g.
 add_default_feeds({media_id=1234})) on the web interface so that one can see
 their status and completion.
