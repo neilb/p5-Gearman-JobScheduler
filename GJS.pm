@@ -11,8 +11,18 @@ use strict;
 use warnings;
 use Modern::Perl "2012";
 
-use Gearman::Client;
+use Gearman::XS qw(:constants);
+use Gearman::XS::Client;
+
+# Cancelling jobs:
 use IO::Socket::INET;
+
+# Hashref serializing / unserializing
+use Data::Compare;
+use Storable qw(freeze thaw);
+# serialize hashes with the same key order:
+$Storable::canonical = 1;
+
 
 # flush sockets after every write
 $| = 1;
@@ -52,7 +62,7 @@ Returns hashref with the job status, e.g.:
 
 =end text
 
-Returns undef if the job ID was not found.
+Returns undef if the job ID was not found; dies on error.
 
 =cut
 sub get_gearman_status($$)
@@ -65,18 +75,22 @@ sub get_gearman_status($$)
 	}
 
 	my $client = $class->_gearman_client;
-	my $status = $client->get_status($gearman_job_id);
+	my ($ret, $known, $running, $numerator, $denominator) = $client->job_status($gearman_job_id);
 
-	unless ($status) {
-		# No such job?
+	unless ($ret == GEARMAN_SUCCESS) {
+		die "Unable to determine status for Gearman job '$gearman_job_id': " . $client->error();
+	}
+
+	unless ($known) {
+		# No such job
 		return undef;
 	}
 
 	my $response = {
 		'gearman_job_id' => $gearman_job_id,
-		'running' => int($status->[1]),
-		'numerator' => int($status->[2]),
-		'denominator' => int($status->[3])
+		'running' => $running,
+		'numerator' => $numerator,
+		'denominator' => $denominator
 	};
 	return $response;
 }
@@ -140,16 +154,52 @@ sub cancel_gearman_job($$)
 }
 
 # Create and return a configured instance of Gearman::Client
-sub _gearman_client($)
+sub _gearman_xs_client($)
 {
 	my $class = shift;
 
 	my $config = $class->_configuration;
 
-	my $client = Gearman::Client->new;
-	$client->job_servers(@{$config->{servers}});
+	my $client = new Gearman::XS::Client;
 
-	return $client;	
+	my $ret = $client->add_servers(join(',', @{$config->{servers}}));
+	unless ($ret == GEARMAN_SUCCESS) {
+		die "Unable to add Gearman servers: " . $client->error();
+	}
+
+	$client->set_created_fn(\sub {
+		my $task = shift;
+		say STDERR "Gearman task created: '" . $task->job_handle() . '"';
+		return GEARMAN_SUCCESS;
+	});
+
+	$client->set_data_fn(\sub {
+		my $task = shift;
+		say STDERR "Data sent to Gearman task '" . $task->job_handle() . "': " . $task->data();
+		return GEARMAN_SUCCESS;
+	});
+
+	$client->set_status_fn(\sub {
+		my $task = shift;
+		say STDERR "Status updated for Gearman task '" . $task->job_handle()
+		         . "': " . $task->numerator()
+		         . " / " . $task->denominator();
+		return GEARMAN_SUCCESS;
+	});
+
+	$client->set_complete_fn(\sub {
+		my $task = shift;
+		say STDERR "Gearman task '" . $task->job_handle() . "' completed with data: " . ($task->data() || '');
+		return GEARMAN_SUCCESS;
+	});
+
+	$client->set_fail_fn(\sub {
+		my $task = shift;
+		say STDERR "Gearman task failed: '" . $task->job_handle() . '"';
+		return GEARMAN_SUCCESS;
+	});
+
+	return $client;
 }
 
 # (static) Return configuration, die() on error
@@ -163,6 +213,103 @@ sub _configuration($)
 	}
 
 	return $config;	
+}
+
+# Serialize a hashref into string (to be passed to Gearman)
+#
+# Parameters:
+# * hashref that is serializable by Storable module (may be undef)
+#
+# Returns:
+# * a string (string is empty if the hashref is undef)
+# 
+# Dies on error.
+sub _serialize_hashref($$)
+{
+	my $class = shift;
+	my $hashref = shift;
+
+	if (ref $class) {
+		die "Use this subroutine as a static method, e.g. GJS->_serialize_hashref()";
+	}
+
+	unless (defined $hashref) {
+		return '';
+	}
+
+	unless (ref $hashref eq 'HASH') {
+		die "Parameter is not a hashref.";
+	}
+
+	# Gearman accepts only scalar arguments
+	my $hashref_serialized = undef;
+	eval {
+		
+		$hashref_serialized = freeze $hashref;
+		
+		# Try to deserialize, see if we get the same hashref
+		my $hashref_deserialized = thaw($hashref_serialized);
+		unless (Compare($hashref, $hashref_deserialized)) {
+
+			my $error = "Serialized and deserialized hashrefs differ.\n";
+			$error .= "Original hashref: " . Dumper($hashref);
+			$error .= "Deserialized hashref: " . Dumper($hashref_deserialized);
+
+			die $error;
+		}
+	};
+	if ($@)
+	{
+		die "Unable to serialize hashref with the Storable module: $@";
+	}
+
+	return $hashref_serialized;
+}
+
+# Unserialize string (coming from Gearman) back into hashref
+#
+# Parameters:
+# * string to be unserialized; may be empty or undef
+#
+# Returns:
+# * hashref (of the unserialized string), or
+# * undef if the string is undef or empty
+# 
+# Dies on error.
+sub _unserialize_hashref($$)
+{
+	my $class = shift;
+	my $string = shift;
+
+	if (ref $class) {
+		die "Use this subroutine as a static method, e.g. GJS->_unserialize_hashref()";
+	}
+
+	unless ($string) {
+		return undef;
+	}
+
+	my $hashref = undef;
+	eval {
+		
+		# Unserialize
+		$hashref = thaw($string);
+
+		unless (defined $hashref) {
+			die "Unserialized hashref is undefined.";
+		}
+
+		unless (ref $hashref eq 'HASH') {
+			die "Result is not a hashref.";
+		}
+
+	};
+	if ($@)
+	{
+		die "Unable to unserialize string with the Storable module: $@";
+	}
+
+	return $hashref;
 }
 
 1;

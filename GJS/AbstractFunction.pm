@@ -27,24 +27,21 @@ use Modern::Perl "2012";
 
 use Moose::Role;
 
-use GJS;
-use GJS::ErrorLogTrapper;
+require 'GJS.pm';
+require 'GJS/ErrorLogTrapper.pm';
+
+use Gearman::XS qw(:constants);
+use Gearman::XS::Client;
+use Gearman::XS::Task;
+use Gearman::XS::Worker;
 
 use IO::File;
 use Capture::Tiny ':all';
 use Time::HiRes;
 use Data::Dumper;
 use Data::UUID;
-use Gearman::Client;
-use Gearman::Task;
-use Gearman::Worker;
-use Data::Compare;
 use Sys::Path;
 use File::Path qw(make_path);
-
-use Storable qw(freeze thaw);
-# serialize hashes with the same key order:
-$Storable::canonical = 1;
 
 
 use constant GJS_JOB_ID_MAX_LENGTH => 256;
@@ -170,9 +167,9 @@ sub set_progress($$$)
 {
 	my ($self, $numerator, $denominator) = @_;
 
-	unless (defined $self->_gearman_worker) {
+	unless (defined $self->_gearman_job) {
 		# Running the job locally, Gearman doesn't have anything to do with this run
-		say STDERR "Gearman worker is nil";
+		DEBUG("Gearman job is undef");
 		return;
 	}
 	unless ($denominator) {
@@ -182,7 +179,10 @@ sub set_progress($$$)
 	# Written to job's log
 	say STDERR "$numerator/$denominator complete.";
 
-	$self->_gearman_worker->set_status($numerator, $denominator);
+	my $ret = $self->_gearman_job->send_status($numerator, $denominator);
+	unless ($ret == GEARMAN_SUCCESS) {
+		LOGDIE("Unable to send Gearman job status: " . $self->_gearman_job->error());
+	}
 }
 
 
@@ -203,6 +203,9 @@ Parameters:
 =item * (optional) C<$args> (hashref), arguments required for running the
 Gearman function  (serializable by the L<Storable> module)
 
+=item * (optional, internal) instance of Gearman::XS::Job to be later used by
+send_progress()
+
 =back
 
 Returns result (may be false of C<undef>) on success, C<die()>s on error
@@ -212,7 +215,7 @@ sub run_locally($;$$)
 {
 	my $class = shift;
 	my $args = shift;
-	my $gearman_worker = shift;
+	my $gearman_job = shift;
 
 	if (ref $class) {
 		die "Use this subroutine as a static method, e.g. MyGearmanFunction->run_locally()";
@@ -220,17 +223,21 @@ sub run_locally($;$$)
 
 	# say STDERR "Running locally";
 
-	if (@_ or($args and ref($args) ne 'HASH' ) or (defined $gearman_worker and ref($gearman_worker) ne 'Gearman::Job' and ref($gearman_worker) ne 'Gearman::Worker')) {
+	if ((@_) or
+		($args and ref($args) ne 'HASH' ) or
+		(defined $gearman_job and ref($gearman_job) ne 'Gearman::XS::Job')) {
+
 		die "run() should accept a single hashref for all the arguments.";
 	}
 
 	my $function_name = $class->_function_name();
 	my $gjs_job_id;
-	if ($gearman_worker) {
-		unless (defined $gearman_worker->{handle}) {
+	if ($gearman_job) {
+		# Running from Gearman
+		unless (defined $gearman_job->handle()) {
 			die "Unable to find a Gearman job ID to be used for logging";
 		}
-		$gjs_job_id = _unique_job_id($function_name, $args, $gearman_worker->{handle});
+		$gjs_job_id = _unique_job_id($function_name, $args, $gearman_job->handle());
 	} else {
 		$gjs_job_id = _unique_job_id($function_name, $args);
 	}
@@ -280,10 +287,12 @@ sub run_locally($;$$)
 			my $instance = $class->new();
 
 			# undef when running locally, instance when issued from _run_locally_from_gearman_worker
-			$instance->_gearman_worker($gearman_worker);
+			$instance->_gearman_job($gearman_job);
 
 			# Do the work
 			$result = $instance->run($args);
+
+			$instance->_gearman_job(undef);
 
 			# Destroy instance
 			$instance = undef;
@@ -354,22 +363,36 @@ sub run_on_gearman($;$)
 	}
 
 	my $config = GJS->_configuration;
-
-	my $client = Gearman::Client->new;
-	$client->job_servers(@{$config->{servers}});
-
-	my $task = $class->_gearman_task_from_args($config, $args);
-	my $result_ref = $client->do_task($task);
-    # say STDERR "Serialized result: " . Dumper($result_ref);
-
-	my $result_deserialized = undef;
-
-	if (defined $result_ref) {
-		$result_deserialized = thaw($$result_ref);
-		$result_deserialized = $$result_deserialized;
+	my $client = GJS->_gearman_xs_client;
+	my $function_name = $class->_function_name;
+	unless ($function_name) {
+		die "Unable to determine function name.";
 	}
 
-	return $result_deserialized;
+	# Run
+	my $args_serialized = GJS->_serialize_hashref($args);
+	say STDERR "Function name: $function_name";
+	say STDERR "Unserialized args: " . Dumper($args);
+	say STDERR "Serialized args: $args_serialized";
+
+	# Gearman::XS::Client seems to not like undefined or empty workload()
+	# so we pass 0 instead
+	$args_serialized ||= 0;
+
+	my ($ret, $result) = $client->do($function_name, $args_serialized);
+	unless ($ret == GEARMAN_SUCCESS) {
+		die "Gearman failed: " . $client->error();
+	}
+
+	# Deserialize the results (because they were serialized and put into
+	# hashref by _run_locally_from_gearman_worker())
+	my $result_deserialized = GJS->_unserialize_hashref($result);
+	if (ref $result_deserialized eq 'HASH') {
+		return $result_deserialized->{result};
+	} else {
+		# No result
+		return undef;
+	}
 }
 
 
@@ -401,89 +424,40 @@ sub enqueue_on_gearman($;$)
 	}
 
 	my $config = GJS->_configuration;
-	my $client = GJS->_gearman_client;
-
-	my $task = $class->_gearman_task_from_args($config, $args);
-
-	my $gearman_job_id = $client->dispatch_background($task);
-
-	say STDERR "Enqueued job '$gearman_job_id' on Gearman";
-
-	return $gearman_job_id;
-}
-
-# (static) Validate the job arguments, create Gearman task from parameters or die on error
-# Returns: instance of Gearman::Task
-# die()s on error
-sub _gearman_task_from_args($$$;$)
-{
-	my $class = shift;
-	my $config = shift;
-	my $args = shift;
-
-	if (ref $class) {
-		die "Use this subroutine as a static method.";
-	}
-
-	if (@_ or ($args and ref($args) ne 'HASH' )) {
-		die "run() should accept arguments as a hashref";
-	}
-
+	my $client = GJS->_gearman_xs_client;
 	my $function_name = $class->_function_name;
 	unless ($function_name) {
 		die "Unable to determine function name.";
 	}
 
-	# Gearman accepts only scalar arguments
-	my $args_serialized = undef;
-	eval {
-		# say STDERR "Arguments: " . Dumper($args);
-		$args_serialized = freeze \%{$args};
-		# say STDERR "Serialized arguments: " . Dumper($args_serialized);
-		my $args_deserialized = \%{ thaw($args_serialized) };
-		# say STDERR "Deserialized arguments: " . Dumper($args_deserialized);
-		unless (Compare($args, $args_deserialized)) {
-			die "Serialized and deserialized argument hashes differ.";
-		}
-	};
-	if ($@)
-	{
-		die "Unable to serialize the argument hash with the Storable module because: $@";
+	# Add task
+	my $args_serialized = GJS->_serialize_hashref($args);
+
+	# Gearman::XS::Client seems to not like undefined or empty workload()
+	# so we pass 0 instead
+	$args_serialized ||= 0;
+
+	my ($ret, $task) = $client->add_task($function_name, $args_serialized);
+	unless ($ret == GEARMAN_SUCCESS) {
+		die "Gearman failed while adding task: " . $client->error();
 	}
 
-	my $task = Gearman::Task->new($function_name, \$args_serialized, {
-		uniq => $class->unique,
-		on_complete => sub {
-			# run_on_gearman() sees this
-			my ($result_ref) = @_;
-			say STDERR "Gearman job completed.";
-		},
-		on_fail => sub {
-			# run_on_gearman() sees this
-			say STDERR "Gearman job is out of retries, giving up.";
-		},
-		on_retry => sub {
-			# run_on_gearman() sees this
-			my ($retry_num) = @_;
-			say STDERR "Gearman job failed, retrying #$retry_num...";
-		},
-		on_status => sub {
-			# run_on_gearman() sees this
-			my ($numerator, $denominator) = @_;
-			say STDERR "Gearman job is $numerator/$denominator complete.";
-		},
-		retry_count => $class->retries,
-		try_timeout => $class->job_timeout,
-	});
+	$ret = $client->run_tasks();
+	unless ($ret == GEARMAN_SUCCESS) {
+		die "Gearman failed while running enqueued tasks: " . $client->error();
+	}
 
-	return $task;
+	my $gearman_job_id = $task->job_handle();
+	say STDERR "Enqueued job '$gearman_job_id' on Gearman";
+
+	return $gearman_job_id;
 }
 
 
 # _run_locally_from_gearman_worker() will pass this parameter to run_locally()
-# which in turn will temporarily place a Gearman worker to this variable so
-# that set_progress() helper can use it
-has '_gearman_worker' => ( is => 'rw' );
+# which, in turn, will temporarily place an instance of Gearman::XS::Job to
+# this variable so that set_progress() helper can later use it
+has '_gearman_job' => ( is => 'rw' );
 
 
 # Run locally and right away, blocking the parent process while it gets finished
@@ -492,33 +466,26 @@ has '_gearman_worker' => ( is => 'rw' );
 sub _run_locally_from_gearman_worker($;$)
 {
 	my $class = shift;
-	my $gearman_worker = shift;
+	my $gearman_job = shift;
 
 	if (ref $class) {
 		LOGDIE("Use this subroutine as a static method.");
 	}
 
-	# Arguments are thawed
-	my $args_deserialized = \%{ thaw($gearman_worker->arg) };
+	# Args were serialized by run_on_gearman()
+	my $args = GJS->_unserialize_hashref($gearman_job->workload());
 
 	my $result;
 	eval {
-		$result = $class->run_locally($args_deserialized, $gearman_worker);
+		$result = $class->run_locally($args, $gearman_job);
 	};
 	if ($@) {
 		LOGDIE("Gearman job died: $@");
 	}
 
-	# Serialize result because it's going to be passed over Gearman
-	# say STDERR "Unserialized result: " . Dumper($result);
-	my $result_serialized = freeze \$result;
-	# say STDERR "Serialized result: " . Dumper($result_serialized);
-	my $result_deserialized = thaw($result_serialized);
-	$result_deserialized = $$result_deserialized;
-	# say STDERR "Deserialized result: " . Dumper($result_deserialized);
-	unless (Compare($result, $result_deserialized)) {
-		LOGDIE("Serialized and deserialized results differ");
-	}
+	# Create a hashref and serialize result because it's going to be passed over Gearman
+	$result = { 'result' => $result };
+	my $result_serialized = GJS->_serialize_hashref($result);
 
 	return $result_serialized;
 }
@@ -685,5 +652,11 @@ so maybe it wouldn't be that bad to leave it there.
 =item * Make an infrastructure to query currently running jobs: e.g.
 run_on_gearman returns some sort of an ID which is queryable through a helper
 function to get the path of the log file and whatnot.
+
+=item * test timeout
+
+=item * test retries
+
+=item * do the "unique" jobs still work?
 
 =back

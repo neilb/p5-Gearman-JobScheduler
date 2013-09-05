@@ -8,7 +8,10 @@ use FindBin;
 use lib "$FindBin::Bin/sample-functions";
 
 use YAML qw(LoadFile);
-use Gearman::Worker;
+
+use Gearman::XS qw(:constants);
+use Gearman::XS::Worker;
+
 use Data::Dumper;
 
 use Log::Log4perl qw(:easy);
@@ -56,27 +59,46 @@ sub main()
 
 	INFO("Initializing with Gearman function '$gearman_function_name'.");
 
-	my $worker = Gearman::Worker->new;
-    $worker->job_servers(@{$config->{servers}});
-    $worker->debug(1);
+	my $ret;
+	my $worker = new Gearman::XS::Worker;
 
-	$worker->register_function($gearman_function_name => sub {
-		my ($gearman_job) = shift;
+	$ret = $worker->add_servers(join(',', @{$config->{servers}}));
+	unless ($ret == GEARMAN_SUCCESS) {
+		LOGDIE("Unable to add Gearman servers: "  . $worker->error());
+	}
 
-		my $job_handle = $gearman_job->{handle};
-		my $result;
-		eval {
-			$result = $gearman_function_name->_run_locally_from_gearman_worker($gearman_job);
-		};
-		if ($@) {
-			LOGDIE("Gearman job with handle '$job_handle' died: $@");
-		}
+	$ret = $worker->add_function(
+		$gearman_function_name,
+		$gearman_function_name->job_timeout() * 1000,	# in milliseconds
+		sub {
+			my ($gearman_job) = shift;
 
-		return $result;
-	});
+			# say STDERR Dumper($gearman_job);
+
+			my $job_handle = $gearman_job->handle();
+			my $result;
+			eval {
+				$result = $gearman_function_name->_run_locally_from_gearman_worker($gearman_job);
+			};
+			if ($@) {
+				LOGDIE("Gearman job with handle '$job_handle' died: $@");
+			}
+
+			return $result;
+		},
+		0
+	);
+	unless ($ret == GEARMAN_SUCCESS) {
+		LOGDIE("Unable to add Gearman function '$gearman_function_name': " . $worker->error());
+	}
 
     INFO("Worker is ready and accepting jobs");
-    $worker->work while 1;
+    while (1) {
+		$ret = $worker->work();
+		unless ($ret == GEARMAN_SUCCESS) {
+			LOGDIE("Unable to execute Gearman job: " . $worker->error());
+		}
+	}
 }
 
 
