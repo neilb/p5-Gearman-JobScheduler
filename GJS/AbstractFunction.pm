@@ -514,16 +514,7 @@ sub _unique_job_id($$;$)
 		# by knowing the Gearman job ID.
 
 		# Strip the host part (if present)
-		if (index($gearman_job_id, '//') != -1) {
-			my ($server, $internal_job_id) = split('//', $gearman_job_id);
-			$gearman_job_id = $internal_job_id;
-		}
-
-		unless ($gearman_job_id =~ /^H:.+?:\d+?$/) {
-			die "Invalid Gearman job ID: $gearman_job_id";
-		}
-
-		$unique_id = $gearman_job_id;
+		$unique_id = GJS->_gearman_job_id_from_handle($gearman_job_id);
 
 	} else {
 

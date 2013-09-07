@@ -39,7 +39,7 @@ Parameters:
 
 =over 4
 
-=item * Gearman job ID (e.g. "127.0.0.1:4730//H:localhost.localdomain:8")
+=item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
 =back
 
@@ -49,7 +49,7 @@ Returns hashref with the job status, e.g.:
 
 {
 	# Gearman job ID that was passed as a parameter
-	'gearman_job_id' => '127.0.0.1:4730//H:tundra.home:8',
+	'gearman_job_id' => 'H:tundra.home:8',
 
 	# Whether or not the job is currently running
 	'running' => 1,
@@ -74,7 +74,7 @@ sub get_gearman_status($$)
 		die "Use this subroutine as a static method, e.g. GJS->get_gearman_status()";
 	}
 
-	my $client = $class->_gearman_client;
+	my $client = $class->_gearman_xs_client;
 	my ($ret, $known, $running, $numerator, $denominator) = $client->job_status($gearman_job_id);
 
 	unless ($ret == GEARMAN_SUCCESS) {
@@ -105,7 +105,7 @@ Parameters:
 
 =over 4
 
-=item * Gearman job ID (e.g. "127.0.0.1:4730//H:localhost.localdomain:8")
+=item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
 =back
 
@@ -117,38 +117,43 @@ die()s on error.
 sub cancel_gearman_job($$)
 {
 	my $class = shift;
-	my $gearman_job_id = shift;
+	my $gearman_job_handle = shift;
 
 	if (ref $class) {
 		die "Use this subroutine as a static method, e.g. GJS->cancel_gearman_job()";
 	}
 
+	my $config = $class->_configuration;
+
+	my $gearman_job_id = $class->_gearman_job_id_from_handle($gearman_job_handle);
+
 	# Neither Gearman::Client nor Gearman::XS::Client provides a helper
-	# subroutine to do this, so we'll have to do this the old way
+	# subroutine to do this, so we'll have to cancel the job by directly
+	# connecting to all the servers
+	foreach my $server (@{$config->{servers}}) {
+		my ($host, $port) = split(':', $server);
 
-	my ($server, $internal_job_id) = split('//', $gearman_job_id);
-	my ($host, $port) = split(':', $server);
+		$port ||= 4730;
+		$port = int($port);
 
-	$port ||= 4730;
-	$port = int($port);
+		my $socket = new IO::Socket::INET (
+		    PeerHost => $host,
+		    PeerPort => $port,
+		    Proto => 'tcp',
+		) or die "Unable to connect to Gearman server: $!\n";
 
-	my $socket = new IO::Socket::INET (
-	    PeerHost => $host,
-	    PeerPort => $port,
-	    Proto => 'tcp',
-	) or die "Unable to connect to Gearman server: $!\n";
+		$socket->send("cancel job " . $gearman_job_id . "\r\n");
 
-	$socket->send("cancel job " . $internal_job_id . "\r\n");
+		my $response = "";
+		$socket->recv($response, 1024);
+		if ($response ne "OK\r\n") {
+			say STDERR "Unable to cancel Gearman job '$gearman_job_id'";
+			$socket->close();
+			return 0;
+		}
 
-	my $response = "";
-	$socket->recv($response, 1024);
-	if ($response ne "OK\r\n") {
-		say STDERR "Unable to cancel Gearman job $gearman_job_id";
 		$socket->close();
-		return 0;
 	}
-
-	$socket->close();
 
 	return 1;
 }
@@ -157,6 +162,10 @@ sub cancel_gearman_job($$)
 sub _gearman_xs_client($)
 {
 	my $class = shift;
+
+	if (ref $class) {
+		die "Use this subroutine as a static method, e.g. GJS->_gearman_xs_client()";
+	}
 
 	my $config = $class->_configuration;
 
@@ -204,12 +213,53 @@ sub _gearman_xs_client($)
 	return $client;
 }
 
+# Return Gearman job ID from Gearman job handle
+#
+# Parameters:
+# * Gearman job handle, e.g.:
+#     * "H:tundra.home:18" (as reported by an instance of Gearman::Job), or
+#     * "127.0.0.1:4730//H:tundra.home:18" (as reported by gearmand)
+#
+# Returns: Gearman job ID (e.g. "H:localhost.localdomain:8")
+#
+# Dies on error.
+sub _gearman_job_id_from_handle($$)
+{
+	my $class = shift;
+	my $gearman_job_handle = shift;
+
+	if (ref $class) {
+		die "Use this subroutine as a static method, e.g. GJS->_gearman_job_id_from_handle()";
+	}
+
+	my $gearman_job_id;
+
+	# Strip the host part (if present)
+	if (index($gearman_job_handle, '//') != -1) {
+		# "127.0.0.1:4730//H:localhost.localdomain:8"
+		my ($server, $gearman_job_id) = split('//', $gearman_job_handle);
+	} else {
+		# "H:localhost.localdomain:8"
+		$gearman_job_id = $gearman_job_handle;
+	}
+
+	# Validate
+	unless ($gearman_job_id =~ /^H:.+?:\d+?$/) {
+		die "Invalid Gearman job ID: $gearman_job_id";
+	}
+
+	return $gearman_job_id;
+}
+
 # (static) Return configuration, die() on error
 sub _configuration($)
 {
 	my $class = shift;
 
-	my $config = LoadFile(GJS_CONFIG_FILE) or LOGDIE("Unable to read configuration from '" . GJS_CONFIG_FILE . "': $!");
+	my $config = LoadFile(GJS_CONFIG_FILE);
+	unless ($config) {
+		LOGDIE("Unable to read configuration from '" . GJS_CONFIG_FILE . "': $!");
+	}
 	unless (scalar (@{$config->{servers}})) {
 		die "No servers are configured.";
 	}
