@@ -644,4 +644,8 @@ function to get the path of the log file and whatnot.
 
 =item * do the "unique" jobs still work?
 
+=item * job priorities
+
+=item * is progress_expected() still needed?
+
 =back
