@@ -437,17 +437,11 @@ sub enqueue_on_gearman($;$)
 	# so we pass 0 instead
 	$args_serialized ||= 0;
 
-	my ($ret, $task) = $client->add_task($function_name, $args_serialized);
+	my ($ret, $gearman_job_id) = $client->do_background($function_name, $args_serialized);
 	unless ($ret == GEARMAN_SUCCESS) {
-		die "Gearman failed while adding task: " . $client->error();
+		die "Gearman failed while doing task in background: " . $client->error();
 	}
 
-	$ret = $client->run_tasks();
-	unless ($ret == GEARMAN_SUCCESS) {
-		die "Gearman failed while running enqueued tasks: " . $client->error();
-	}
-
-	my $gearman_job_id = $task->job_handle();
 	say STDERR "Enqueued job '$gearman_job_id' on Gearman";
 
 	return $gearman_job_id;
