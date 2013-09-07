@@ -167,19 +167,20 @@ sub _gearman_xs_client($)
 		die "Unable to add Gearman servers: " . $client->error();
 	}
 
-	$client->set_created_fn(\sub {
+	$client->set_created_fn(sub {
 		my $task = shift;
 		say STDERR "Gearman task created: '" . $task->job_handle() . '"';
 		return GEARMAN_SUCCESS;
 	});
 
-	$client->set_data_fn(\sub {
+	$client->set_data_fn(sub {
 		my $task = shift;
-		say STDERR "Data sent to Gearman task '" . $task->job_handle() . "': " . $task->data();
+		say STDERR "Data sent to Gearman task '" . $task->job_handle()
+		         . "': " . $task->data();
 		return GEARMAN_SUCCESS;
 	});
 
-	$client->set_status_fn(\sub {
+	$client->set_status_fn(sub {
 		my $task = shift;
 		say STDERR "Status updated for Gearman task '" . $task->job_handle()
 		         . "': " . $task->numerator()
@@ -187,13 +188,14 @@ sub _gearman_xs_client($)
 		return GEARMAN_SUCCESS;
 	});
 
-	$client->set_complete_fn(\sub {
+	$client->set_complete_fn(sub {
 		my $task = shift;
-		say STDERR "Gearman task '" . $task->job_handle() . "' completed with data: " . ($task->data() || '');
+		say STDERR "Gearman task '" . $task->job_handle()
+		         . "' completed with data: " . ($task->data() || '');
 		return GEARMAN_SUCCESS;
 	});
 
-	$client->set_fail_fn(\sub {
+	$client->set_fail_fn(sub {
 		my $task = shift;
 		say STDERR "Gearman task failed: '" . $task->job_handle() . '"';
 		return GEARMAN_SUCCESS;
