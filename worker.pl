@@ -81,10 +81,13 @@ sub main()
 				$result = $gearman_function_name->_run_locally_from_gearman_worker($gearman_job);
 			};
 			if ($@) {
-				LOGDIE("Gearman job with handle '$job_handle' died: $@");
+				INFO("Gearman job '$job_handle' died: $@");
+				$gearman_job->send_fail();
+				return undef;
+			} else {
+				$gearman_job->send_complete($result);
+				return $result;
 			}
-
-			return $result;
 		},
 		0
 	);
