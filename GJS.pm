@@ -23,11 +23,17 @@ use Storable qw(freeze thaw);
 # serialize hashes with the same key order:
 $Storable::canonical = 1;
 
+use Data::UUID;
+use Sys::Path;
+use File::Path qw(make_path);
+
 
 # flush sockets after every write
 $| = 1;
 
 use constant GJS_CONFIG_FILE => 'config.yml';
+
+use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
 
 
@@ -95,6 +101,7 @@ sub get_gearman_status($$)
 	return $response;
 }
 
+
 =head2 (static) C<cancel_gearman_job($gearman_job_id)>
 
 (Attempt to) cancel a Gearman job.
@@ -156,6 +163,156 @@ sub cancel_gearman_job($$)
 	}
 
 	return 1;
+}
+
+
+=head2 (static) C<log_path_for_gearman_job($function_name, $gearman_job_handle)>
+
+Get a path to where Gearman expects to save the job's log.
+
+(Warning: the job has to running; if not, this subroutine will complain and die.)
+
+Parameters:
+
+=over 4
+
+=item * Function name (e.g. "NinetyNineBottlesOfBeer")
+
+=item * Gearman job ID (e.g. "H:localhost.localdomain:8")
+
+=back
+
+Returns log path where the job's log is being written, e.g.
+"/var/log/gjs/NinetyNineBottlesOfBeer/H_tundra.local_93.NinetyNineBottlesOfBeer().log"
+
+die()s on error.
+
+=cut
+sub log_path_for_gearman_job($$$)
+{
+	my $class = shift;
+	my $function_name = shift;
+	my $gearman_job_handle = shift;
+
+	if (ref $class) {
+		die "Use this subroutine as a static method, e.g. GJS->log_path_for_gearman_job()";
+	}
+
+	# If the job is not running, the log path will not be available
+	my $job_status = $class->get_gearman_status($gearman_job_handle);
+	if ((! $job_status) or (! $job_status->{running})) {
+		warn "Job '$gearman_job_handle' is not running, so the path returned might not yet exist. Try again later.";
+	}
+
+	my $config = $class->_configuration;
+
+	my $gearman_job_id = $class->_gearman_job_id_from_handle($gearman_job_handle);
+
+	# Sanitize the ID just like run_locally() would
+	$gearman_job_id = _sanitize_for_path($gearman_job_id);
+
+	my $log_path_glob = $class->_init_and_return_worker_log_dir($function_name) . $gearman_job_id . '*.log';
+	my @log_paths = glob $log_path_glob;
+
+	if (scalar @log_paths == 0) {
+		die "Log path not found for expression: $log_path_glob";
+	}
+	if (scalar @log_paths > 1) {
+		die "Two or more logs found for expression: $log_path_glob";
+	}
+
+	return $log_paths[0];
+}
+
+
+# (static) Return an unique, path-safe job name which is suitable for writing
+# to the filesystem (e.g. for logging)
+#
+# Parameters:
+# * Gearman function name, e.g. 'NinetyNineBottlesOfBeer'
+# * hashref of job arguments, e.g. "{ 'how_many_bottles' => 13 }"
+# * (optional) Gearman job ID, e.g.:
+#     * "H:tundra.home:18" (as reported by an instance of Gearman::Job), or
+#     * "127.0.0.1:4730//H:tundra.home:18" (as reported by gearmand)
+#
+# Returns: unique job ID, e.g.:
+# * "084567C4146F11E38F00CB951DB7256D.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)", or
+# * "H_tundra.home_18.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
+sub _unique_path_job_id($$$;$)
+{
+	my ($class, $function_name, $job_args, $gearman_job_id) = @_;
+
+	unless ($function_name) {
+		return undef;
+	}
+
+	my $unique_id;
+	if ($gearman_job_id) {
+
+		# If Gearman job ID was passed as a parameter, this means that the job
+		# was run by Gearman (by running run_on_gearman() or enqueue_on_gearman()).
+		# Thus, the job has to be logged to a location that can later be found
+		# by knowing the Gearman job ID.
+
+		# Strip the host part (if present)
+		$unique_id = GJS->_gearman_job_id_from_handle($gearman_job_id);
+
+	} else {
+
+		# If no Gearman job ID was provided, this means that the job is being
+		# run locally.
+		# The job's output still has to be logged somewhere, so we generate an
+		# UUID to serve in place of Gearman job ID.
+
+		my $ug    = new Data::UUID;
+		my $uuid = $ug->create_str();	# e.g. "059303A4-F3F1-11E2-9246-FB1713B42706"
+		$uuid =~ s/\-//gs;				# e.g. "059303A4F3F111E29246FB1713B42706"
+
+		$unique_id = $uuid;		
+	}
+
+	# ID goes first in case the job name shortener decides to cut out a part of the job ID
+	my $gjs_job_id = $unique_id. '.' . $class->_unique_job_id($function_name, $job_args);
+	if (length ($gjs_job_id) > GJS_JOB_ID_MAX_LENGTH) {
+		$gjs_job_id = substr($gjs_job_id, 0, GJS_JOB_ID_MAX_LENGTH);
+	}
+
+	# Sanitize for paths
+	$gjs_job_id = _sanitize_for_path($gjs_job_id);
+
+	return $gjs_job_id;
+}
+
+# (static) Return an unique job ID that will identify a particular job with its
+# arguments
+#
+# * Gearman function name, e.g. 'NinetyNineBottlesOfBeer'
+# * hashref of job arguments, e.g. "{ 'how_many_bottles' => 13 }"
+#
+# Returns: unique job ID, e.g. "NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
+sub _unique_job_id($$$)
+{
+	my ($class, $function_name, $job_args) = @_;
+
+	unless ($function_name) {
+		return undef;
+	}
+
+	# Convert to string
+	$job_args = ($job_args and scalar keys $job_args)
+		? join(', ', map { "$_ = $job_args->{$_}" } sort(keys $job_args))
+		: '';
+
+	return "$function_name($job_args)";
+}
+
+sub _sanitize_for_path($)
+{
+	my $string = shift;
+
+	$string =~ s/[^a-zA-Z0-9\.\-_\(\)=,]/_/gi;
+
+	return $string;
 }
 
 # Create and return a configured instance of Gearman::Client
@@ -249,6 +406,31 @@ sub _gearman_job_id_from_handle($$)
 	}
 
 	return $gearman_job_id;
+}
+
+# (static) Initialize (create missing directories) and return a worker log directory path (with trailing slash)
+sub _init_and_return_worker_log_dir($$)
+{
+	my ($class, $function_name) = @_;
+
+	if (ref $class) {
+		die "Use this subroutine as a static method.";
+	}
+
+	my $config = $class->_configuration;
+	my $worker_log_dir = $config->{worker_log_dir} || Sys::Path->logdir . '/gjs/';
+
+	# Add a trailing slash
+    $worker_log_dir =~ s!/*$!/!;
+
+    # Append the function name
+    $worker_log_dir .= $function_name . '/';
+
+    unless ( -d $worker_log_dir ) {
+    	make_path( $worker_log_dir );
+    }
+
+    return $worker_log_dir;
 }
 
 # (static) Return configuration, die() on error

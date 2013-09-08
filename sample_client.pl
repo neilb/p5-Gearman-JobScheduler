@@ -23,6 +23,7 @@ sub main()
 	# $result = NinetyNineBottlesOfBeer->run_on_gearman({how_many_bottles => 3});
 	$result = NinetyNineBottlesOfBeer->enqueue_on_gearman();
 	say STDERR "Result: $result";
+	say STDERR "Log path: " . GJS->log_path_for_gearman_job('NinetyNineBottlesOfBeer', $result);
 
 	$result = NinetyNineBottlesOfBeer->enqueue_on_gearman();
 	say STDERR "Result: $result";

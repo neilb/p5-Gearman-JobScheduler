@@ -39,12 +39,7 @@ use IO::File;
 use Capture::Tiny ':all';
 use Time::HiRes;
 use Data::Dumper;
-use Data::UUID;
-use Sys::Path;
-use File::Path qw(make_path);
 
-
-use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
 # used for capturing STDOUT and STDERR output of each job and timestamping it;
 # initialized before each job
@@ -225,15 +220,15 @@ sub run_locally($;$$)
 		unless (defined $gearman_job->handle()) {
 			die "Unable to find a Gearman job ID to be used for logging";
 		}
-		$gjs_job_id = _unique_path_job_id($function_name, $args, $gearman_job->handle());
+		$gjs_job_id = GJS->_unique_path_job_id($function_name, $args, $gearman_job->handle());
 	} else {
-		$gjs_job_id = _unique_path_job_id($function_name, $args);
+		$gjs_job_id = GJS->_unique_path_job_id($function_name, $args);
 	}
 	unless ($gjs_job_id) {
 		die "Unable to determine unique GJS job ID";
 	}
 
-	my $log_path = $class->_init_and_return_worker_log_dir($function_name) . $gjs_job_id . '.log';
+	my $log_path = GJS->_init_and_return_worker_log_dir($function_name) . $gjs_job_id . '.log';
 	my $starting_job_message;
 	if ( -f $log_path ) {
 		# Worker crashed last time and now tries to write to the same log path
@@ -401,7 +396,7 @@ sub run_on_gearman($;$)
 	if ($class->unique()) {
 		# If the job is set to be "unique", we need to pass a "unique identifier"
 		# to Gearman so that it knows which jobs to merge into one
-		($ret, $result) = $client->do($function_name, $args_serialized, _unique_job_id($function_name, $args));
+		($ret, $result) = $client->do($function_name, $args_serialized, GJS->_unique_job_id($function_name, $args));
 	} else {
 		($ret, $result) = $client->do($function_name, $args_serialized);
 	}
@@ -466,7 +461,7 @@ sub enqueue_on_gearman($;$)
 	if ($class->unique()) {
 		# If the job is set to be "unique", we need to pass a "unique identifier"
 		# to Gearman so that it knows which jobs to merge into one
-		($ret, $gearman_job_id) = $client->do_background($function_name, $args_serialized, _unique_job_id($function_name, $args));
+		($ret, $gearman_job_id) = $client->do_background($function_name, $args_serialized, GJS->_unique_job_id($function_name, $args));
 	} else {
 		($ret, $gearman_job_id) = $client->do_background($function_name, $args_serialized);
 	}
@@ -516,88 +511,6 @@ sub _run_locally_from_gearman_worker($;$)
 	return $result_serialized;
 }
 
-# (static) Return an unique, path-safe job name which is suitable for writing
-# to the filesystem (e.g. for logging)
-#
-# Parameters:
-# * Gearman function name, e.g. 'NinetyNineBottlesOfBeer'
-# * hashref of job arguments, e.g. "{ 'how_many_bottles' => 13 }"
-# * (optional) Gearman job ID, e.g.:
-#     * "H:tundra.home:18" (as reported by an instance of Gearman::Job), or
-#     * "127.0.0.1:4730//H:tundra.home:18" (as reported by gearmand)
-#
-# Returns: unique job ID, e.g.:
-# * "084567C4146F11E38F00CB951DB7256D.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)", or
-# * "H_tundra.home_18.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
-sub _unique_path_job_id($$;$)
-{
-	my ($function_name, $job_args, $gearman_job_id) = @_;
-
-	unless ($function_name) {
-		return undef;
-	}
-
-	my $unique_id;
-	if ($gearman_job_id) {
-
-		# If Gearman job ID was passed as a parameter, this means that the job
-		# was run by Gearman (by running run_on_gearman() or enqueue_on_gearman()).
-		# Thus, the job has to be logged to a location that can later be found
-		# by knowing the Gearman job ID.
-
-		# Strip the host part (if present)
-		$unique_id = GJS->_gearman_job_id_from_handle($gearman_job_id);
-
-	} else {
-
-		# If no Gearman job ID was provided, this means that the job is being
-		# run locally.
-		# The job's output still has to be logged somewhere, so we generate an
-		# UUID to serve in place of Gearman job ID.
-
-		my $ug    = new Data::UUID;
-		my $uuid = $ug->create_str();	# e.g. "059303A4-F3F1-11E2-9246-FB1713B42706"
-		$uuid =~ s/\-//gs;				# e.g. "059303A4F3F111E29246FB1713B42706"
-
-		$unique_id = $uuid;		
-	}
-
-	# UUID goes first in case the job name shortener decides to cut out a part of the job ID
-	my $gjs_job_id = $unique_id. '.' . _unique_job_id($function_name, $job_args);
-	if (length ($gjs_job_id) > GJS_JOB_ID_MAX_LENGTH) {
-		$gjs_job_id = substr($gjs_job_id, 0, GJS_JOB_ID_MAX_LENGTH);
-	}
-
-	# Sanitize for paths
-	$gjs_job_id =~ s/[^a-zA-Z0-9\.\-_\(\)=,]/_/gi;
-
-	return $gjs_job_id;
-}
-
-
-# (static) Return an unique job ID that will identify a particular job with its
-# arguments
-#
-# * Gearman function name, e.g. 'NinetyNineBottlesOfBeer'
-# * hashref of job arguments, e.g. "{ 'how_many_bottles' => 13 }"
-#
-# Returns: unique job ID, e.g. "NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
-sub _unique_job_id($$)
-{
-	my ($function_name, $job_args) = @_;
-
-	unless ($function_name) {
-		return undef;
-	}
-
-	# Convert to string
-	$job_args = ($job_args and scalar keys $job_args)
-		? join(', ', map { "$_ = $job_args->{$_}" } sort(keys $job_args))
-		: '';
-
-	return "$function_name($job_args)";
-}
-
 
 # Returns function name (e.g. 'NinetyNineBottlesOfBeer')
 sub _function_name($)
@@ -630,31 +543,6 @@ sub _reset_log4perl()
 	});
 }
 
-# (static) Initialize (create missing directories) and return a worker log directory path (with trailing slash)
-sub _init_and_return_worker_log_dir($$)
-{
-	my ($class, $function_name) = @_;
-
-	if (ref $class) {
-		die "Use this subroutine as a static method.";
-	}
-
-	my $config = GJS->_configuration;
-	my $worker_log_dir = $config->{worker_log_dir} || Sys::Path->logdir . '/gjs/';
-
-	# Add a trailing slash
-    $worker_log_dir =~ s!/*$!/!;
-
-    # Append the function name
-    $worker_log_dir .= $function_name . '/';
-
-    unless ( -d $worker_log_dir ) {
-    	make_path( $worker_log_dir );
-    }
-
-    return $worker_log_dir;
-}
-
 
 1;
 
@@ -668,8 +556,6 @@ no Moose;    # gets rid of scaffolding
 
 =item * improve differentiation between jobs, functions, tasks, etc.
 
-=item * progress reports
-
 =item * Email reports about failed function runs
 
 =item * Script to run all workers at the same time
@@ -677,10 +563,6 @@ no Moose;    # gets rid of scaffolding
 =item * (Maybe) Put the argument list as the first line of the log file
 (argument list is truncated, sanitized and is there for the display purposes,
 so maybe it wouldn't be that bad to leave it there.
-
-=item * Make an infrastructure to query currently running jobs: e.g.
-run_on_gearman returns some sort of an ID which is queryable through a helper
-function to get the path of the log file and whatnot.
 
 =item * test timeout
 
