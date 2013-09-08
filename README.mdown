@@ -131,10 +131,6 @@ enqueued successfully, `die()`s on error.
 
 - improve differentiation between jobs, functions, tasks, etc.
 - progress reports
-- proper support of retrying (Perl's Gearman module doesn't support it)
-- Figure out how to identify individual jobs (e.g.
-add\_default\_feeds({media\_id=1234})) on the web interface so that one can see
-their status and completion.
 - Email reports about failed function runs
 - Script to run all workers at the same time
 - (Maybe) Put the argument list as the first line of the log file
