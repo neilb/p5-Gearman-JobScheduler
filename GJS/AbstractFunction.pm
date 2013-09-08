@@ -554,8 +554,6 @@ no Moose;    # gets rid of scaffolding
 
 =over 4
 
-=item * improve differentiation between jobs, functions, tasks, etc.
-
 =item * Email reports about failed function runs
 
 =item * Script to run all workers at the same time
