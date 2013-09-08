@@ -119,7 +119,7 @@ requires 'retries';
 
 =head2 (static) C<unique()>
 
-Return true if the function is "unique".
+Return true if the function is "unique" (only for Gearman requests).
 
 Returns true if two or more jobs with the same parameters can not be run at the
 same and instead should be merged into one.
@@ -225,9 +225,9 @@ sub run_locally($;$$)
 		unless (defined $gearman_job->handle()) {
 			die "Unable to find a Gearman job ID to be used for logging";
 		}
-		$gjs_job_id = _unique_job_id($function_name, $args, $gearman_job->handle());
+		$gjs_job_id = _unique_path_job_id($function_name, $args, $gearman_job->handle());
 	} else {
-		$gjs_job_id = _unique_job_id($function_name, $args);
+		$gjs_job_id = _unique_path_job_id($function_name, $args);
 	}
 	unless ($gjs_job_id) {
 		die "Unable to determine unique GJS job ID";
@@ -391,15 +391,20 @@ sub run_on_gearman($;$)
 
 	# Run
 	my $args_serialized = GJS->_serialize_hashref($args);
-	say STDERR "Function name: $function_name";
-	say STDERR "Unserialized args: " . Dumper($args);
-	say STDERR "Serialized args: $args_serialized";
 
 	# Gearman::XS::Client seems to not like undefined or empty workload()
 	# so we pass 0 instead
 	$args_serialized ||= 0;
 
-	my ($ret, $result) = $client->do($function_name, $args_serialized);
+	# Do the job
+	my ($ret, $result);
+	if ($class->unique()) {
+		# If the job is set to be "unique", we need to pass a "unique identifier"
+		# to Gearman so that it knows which jobs to merge into one
+		($ret, $result) = $client->do($function_name, $args_serialized, _unique_job_id($function_name, $args));
+	} else {
+		($ret, $result) = $client->do($function_name, $args_serialized);
+	}
 	unless ($ret == GEARMAN_SUCCESS) {
 		die "Gearman failed: " . $client->error();
 	}
@@ -457,7 +462,14 @@ sub enqueue_on_gearman($;$)
 	# so we pass 0 instead
 	$args_serialized ||= 0;
 
-	my ($ret, $gearman_job_id) = $client->do_background($function_name, $args_serialized);
+	my ($ret, $gearman_job_id);
+	if ($class->unique()) {
+		# If the job is set to be "unique", we need to pass a "unique identifier"
+		# to Gearman so that it knows which jobs to merge into one
+		($ret, $gearman_job_id) = $client->do_background($function_name, $args_serialized, _unique_job_id($function_name, $args));
+	} else {
+		($ret, $gearman_job_id) = $client->do_background($function_name, $args_serialized);
+	}
 	unless ($ret == GEARMAN_SUCCESS) {
 		die "Gearman failed while doing task in background: " . $client->error();
 	}
@@ -505,7 +517,7 @@ sub _run_locally_from_gearman_worker($;$)
 }
 
 # (static) Return an unique, path-safe job name which is suitable for writing
-# to the filesystem
+# to the filesystem (e.g. for logging)
 #
 # Parameters:
 # * Gearman function name, e.g. 'NinetyNineBottlesOfBeer'
@@ -517,7 +529,7 @@ sub _run_locally_from_gearman_worker($;$)
 # Returns: unique job ID, e.g.:
 # * "084567C4146F11E38F00CB951DB7256D.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)", or
 # * "H_tundra.home_18.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
-sub _unique_job_id($$;$)
+sub _unique_path_job_id($$;$)
 {
 	my ($function_name, $job_args, $gearman_job_id) = @_;
 
@@ -550,14 +562,8 @@ sub _unique_job_id($$;$)
 		$unique_id = $uuid;		
 	}
 
-
-	# Convert to string
-	$job_args = ($job_args and scalar keys $job_args)
-		? join(', ', map { "$_ = $job_args->{$_}" } keys $job_args)
-		: '';
-
 	# UUID goes first in case the job name shortener decides to cut out a part of the job ID
-	my $gjs_job_id = "$unique_id.$function_name($job_args)";
+	my $gjs_job_id = $unique_id. '.' . _unique_job_id($function_name, $job_args);
 	if (length ($gjs_job_id) > GJS_JOB_ID_MAX_LENGTH) {
 		$gjs_job_id = substr($gjs_job_id, 0, GJS_JOB_ID_MAX_LENGTH);
 	}
@@ -566,6 +572,30 @@ sub _unique_job_id($$;$)
 	$gjs_job_id =~ s/[^a-zA-Z0-9\.\-_\(\)=,]/_/gi;
 
 	return $gjs_job_id;
+}
+
+
+# (static) Return an unique job ID that will identify a particular job with its
+# arguments
+#
+# * Gearman function name, e.g. 'NinetyNineBottlesOfBeer'
+# * hashref of job arguments, e.g. "{ 'how_many_bottles' => 13 }"
+#
+# Returns: unique job ID, e.g. "NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
+sub _unique_job_id($$)
+{
+	my ($function_name, $job_args) = @_;
+
+	unless ($function_name) {
+		return undef;
+	}
+
+	# Convert to string
+	$job_args = ($job_args and scalar keys $job_args)
+		? join(', ', map { "$_ = $job_args->{$_}" } sort(keys $job_args))
+		: '';
+
+	return "$function_name($job_args)";
 }
 
 
@@ -660,8 +690,8 @@ function to get the path of the log file and whatnot.
 
 =item * test timeout
 
-=item * do the "unique" jobs still work?
-
 =item * job priorities
+
+=item * store Gearman queue in PostgreSQL?
 
 =back

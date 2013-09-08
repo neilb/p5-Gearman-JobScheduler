@@ -61,7 +61,7 @@ Returns 0 if the job should not be retried (attempted only once).
 
 ## (static) `unique()`
 
-Return true if the function is "unique".
+Return true if the function is "unique" (only for Gearman requests).
 
 Returns true if two or more jobs with the same parameters can not be run at the
 same and instead should be merged into one.
@@ -144,5 +144,5 @@ so maybe it wouldn't be that bad to leave it there.
 run\_on\_gearman returns some sort of an ID which is queryable through a helper
 function to get the path of the log file and whatnot.
 - test timeout
-- do the "unique" jobs still work?
 - job priorities
+- store Gearman queue in PostgreSQL?
