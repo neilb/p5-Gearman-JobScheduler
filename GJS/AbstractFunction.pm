@@ -556,6 +556,10 @@ no Moose;    # gets rid of scaffolding
 
 =over 4
 
+=item * rename to a name usable in Media Cloud infrastructure (make a proper Perl module out of it)
+
+=item * code formatting
+
 =item * Email reports about failed function runs
 
 =item * Script to run all workers at the same time
