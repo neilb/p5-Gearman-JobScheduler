@@ -282,24 +282,56 @@ sub run_locally($;$$)
 
 		my $start = Time::HiRes::gettimeofday();
 
-		# Try to run the job
-		eval {
-			my $instance = $class->new();
-
-			# undef when running locally, instance when issued from _run_locally_from_gearman_worker
-			$instance->_gearman_job($gearman_job);
-
-			# Do the work
-			$result = $instance->run($args);
-
-			$instance->_gearman_job(undef);
-
-			# Destroy instance
-			$instance = undef;
-		};
-	    if ( $@ )
+	    my $job_succeeded = 0;
+	    for ( my $retry = 0 ; $retry <= $class->retries() ; ++$retry )
 	    {
-	        die "Job \"$gjs_job_id\" died: $@";
+	        if ( $retry > 0 )
+	        {
+	        	say STDERR "";
+				say STDERR "========";
+	            say STDERR "Retrying ($retry)...";
+				say STDERR "========";
+	        	say STDERR "";
+	        }
+
+	        eval {
+
+				# Try to run the job
+				my $instance = $class->new();
+
+				# _gearman_job is undef when running locally, instance when issued from _run_locally_from_gearman_worker
+				$instance->_gearman_job($gearman_job);
+
+				# Do the work
+				$result = $instance->run($args);
+
+				# Unset the _gearman_job for the sake of cleanliness
+				$instance->_gearman_job(undef);
+
+				# Destroy instance
+				$instance = undef;
+
+	            $job_succeeded = 1;
+	        };
+
+	        if ( $@ )
+	        {
+	            say STDERR "Job \"$gjs_job_id\" failed: $@";
+	        }
+	        else
+	        {
+	            last;
+	        }
+	    }
+
+	    unless ( $job_succeeded )
+	    {
+	    	my $job_failed_message = "Job \"$gjs_job_id\" failed" . ($class->retries() ? " after " . $class->retries() . " retries" : "") . ": $@";
+
+			say STDERR "";
+			say STDERR "========";
+	    	say STDERR $job_failed_message;
+	        die $job_failed_message;
 	    }
 
 	    my $end = Time::HiRes::gettimeofday();
@@ -639,8 +671,6 @@ run_on_gearman returns some sort of an ID which is queryable through a helper
 function to get the path of the log file and whatnot.
 
 =item * test timeout
-
-=item * test retries
 
 =item * do the "unique" jobs still work?
 
