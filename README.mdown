@@ -54,8 +54,10 @@ Returns the timeout (in seconds) of each job or 0 if there's no timeout.
 
 Return the number of retries for each job.
 
-Returns a number of retries each job will be attempted at. Returns 0 if the job
-should not be retried.
+Returns a number of retries each job will be attempted at. For example, if the
+number of retries is set to 3, the job will be attempted 4 four times in total.
+
+Returns 0 if the job should not be retried (attempted only once).
 
 ## (static) `unique()`
 

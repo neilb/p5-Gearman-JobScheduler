@@ -33,6 +33,7 @@ sub job_timeout()
 # Return a number of retries (0 for no retries)
 sub retries()
 {
+	# The job will be attempted 4 times in total
 	return 3;
 }
 
