@@ -82,8 +82,6 @@ Provides progress reports when available:
 
 =over 4
 
-=item * if C<progress_expected()> is enabled
-
 =item * by calling C<$self-E<gt>set_progress($numerator, $denominator)>
 
 =back
@@ -126,18 +124,6 @@ same and instead should be merged into one.
 
 =cut
 requires 'unique';
-
-
-=head2 (static) C<progress_expected()>
-
-Return true if the function's jobs are expected to provide progress.
-
-Returns true if the function's individual jobs are expected to provide progress
-reports via C<$self-E<gt>set_progress($numerator, $denominator)>.
-
-=cut
-requires 'progress_expected';
-
 
 
 =head1 HELPER SUBROUTINES
@@ -675,7 +661,5 @@ function to get the path of the log file and whatnot.
 =item * do the "unique" jobs still work?
 
 =item * job priorities
-
-=item * is progress_expected() still needed?
 
 =back

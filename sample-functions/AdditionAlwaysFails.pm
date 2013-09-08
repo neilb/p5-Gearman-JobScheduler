@@ -44,13 +44,6 @@ sub unique()
 }
 
 
-# Each job will provide progress reports via $self->progress($numerator, $denominator)?
-sub progress_expected()
-{
-	return 0;
-}
-
-
 no Moose;    # gets rid of scaffolding
 
 

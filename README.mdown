@@ -38,7 +38,6 @@ will be discarded if the job is ordered on Gearman as a background process.
 
 Provides progress reports when available:
 
-- if `progress_expected()` is enabled
 - by calling `$self->set_progress($numerator, $denominator)`
 
 `die()`s on error.
@@ -64,13 +63,6 @@ Return true if the function is "unique".
 
 Returns true if two or more jobs with the same parameters can not be run at the
 same and instead should be merged into one.
-
-## (static) `progress_expected()`
-
-Return true if the function's jobs are expected to provide progress.
-
-Returns true if the function's individual jobs are expected to provide progress
-reports via `$self->set_progress($numerator, $denominator)`.
 
 # HELPER SUBROUTINES
 
@@ -103,6 +95,8 @@ Parameters:
 
 - (optional) `$args` (hashref), arguments required for running the
 Gearman function  (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
+- (optional, internal) instance of Gearman::XS::Job to be later used by
+send\_progress()
 
 Returns result (may be false of `undef`) on success, `die()`s on error
 
@@ -147,3 +141,6 @@ so maybe it wouldn't be that bad to leave it there.
 - Make an infrastructure to query currently running jobs: e.g.
 run\_on\_gearman returns some sort of an ID which is queryable through a helper
 function to get the path of the log file and whatnot.
+- test timeout
+- do the "unique" jobs still work?
+- job priorities
