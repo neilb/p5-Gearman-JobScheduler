@@ -261,6 +261,8 @@ sub run_locally($;$$)
 
 		say STDERR $starting_job_message;
 		say STDERR "========";
+		say STDERR "Arguments: " . Dumper($args);
+		say STDERR "========";
 		say STDERR "";
 
 		my $start = Time::HiRes::gettimeofday();
@@ -557,10 +559,6 @@ no Moose;    # gets rid of scaffolding
 =item * Email reports about failed function runs
 
 =item * Script to run all workers at the same time
-
-=item * (Maybe) Put the argument list as the first line of the log file
-(argument list is truncated, sanitized and is there for the display purposes,
-so maybe it wouldn't be that bad to leave it there.
 
 =item * test timeout
 

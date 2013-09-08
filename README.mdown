@@ -129,16 +129,8 @@ enqueued successfully, `die()`s on error.
 
 # TODO
 
-- improve differentiation between jobs, functions, tasks, etc.
-- progress reports
 - Email reports about failed function runs
 - Script to run all workers at the same time
-- (Maybe) Put the argument list as the first line of the log file
-(argument list is truncated, sanitized and is there for the display purposes,
-so maybe it wouldn't be that bad to leave it there.
-- Make an infrastructure to query currently running jobs: e.g.
-run\_on\_gearman returns some sort of an ID which is queryable through a helper
-function to get the path of the log file and whatnot.
 - test timeout
 - job priorities
 - store Gearman queue in PostgreSQL?
