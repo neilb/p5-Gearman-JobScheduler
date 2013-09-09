@@ -129,6 +129,8 @@ enqueued successfully, `die()`s on error.
 
 # TODO
 
+- rename to a name usable in Media Cloud infrastructure (make a proper Perl module out of it)
+- code formatting
 - Email reports about failed function runs
 - Script to run all workers at the same time
 - test timeout
