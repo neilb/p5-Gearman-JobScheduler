@@ -562,8 +562,6 @@ no Moose;    # gets rid of scaffolding
 
 =item * Email reports about failed function runs
 
-=item * Script to run all workers at the same time
-
 =item * test timeout
 
 =item * job priorities
