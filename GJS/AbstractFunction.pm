@@ -627,4 +627,8 @@ no Moose;    # gets rid of scaffolding
 
 =item * store Gearman queue in PostgreSQL?
 
+=item * get rid of configuration (easier integration with the rest of the system)
+
+=item * default implementations of helper subroutines
+
 =back

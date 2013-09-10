@@ -142,3 +142,5 @@ enqueued successfully, `die()`s on error.
 - test timeout
 - job priorities
 - store Gearman queue in PostgreSQL?
+- get rid of configuration (easier integration with the rest of the system)
+- default implementations of helper subroutines
