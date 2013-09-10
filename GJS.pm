@@ -19,6 +19,7 @@ use IO::Socket::INET;
 
 # Hashref serializing / unserializing
 use Data::Compare;
+use Data::Dumper;
 use Storable qw(freeze thaw);
 # serialize hashes with the same key order:
 $Storable::canonical = 1;
@@ -26,6 +27,9 @@ $Storable::canonical = 1;
 use Data::UUID;
 use Sys::Path;
 use File::Path qw(make_path);
+
+use Email::MIME;
+use Email::Sender::Simple qw(try_to_sendmail);
 
 
 # flush sockets after every write
@@ -544,6 +548,66 @@ sub _unserialize_hashref($$)
 	}
 
 	return $hashref;
+}
+
+# Send email to someone; returns 1 on success, 0 on failure
+sub _send_email($$$$)
+{
+    my ( $class, $subject, $message ) = @_;
+
+    my $config = $class->_configuration;
+
+    unless (scalar (@{$config->{ notification_emails }->{ recipients }})) {
+    	# No one to send mail to
+    	return 1;
+    }
+
+	if (ref $class) {
+		die "Use this subroutine as a static method, e.g. GJS->_send_email()";
+	}
+
+	my $from_email = $config->{ notification_emails }->{ from_email } || 'gjs_donotreply@example.com';
+	# Two slashes because prefix may be empty:
+	my $subject_prefix = $config->{ notification_emails }->{ subject_prefix } // '[GJS]';
+	$subject = ($subject_prefix ? "$subject_prefix " : '' ) . $subject;
+
+	my $message_body = <<"EOF";
+Hello,
+
+$message
+
+-- 
+Gearman Job Scheduler (GJS)
+
+EOF
+
+	# say STDERR "Will send email to: " . Dumper($config->{ notification_emails }->{ recipients });
+	# say STDERR "Subject: $subject";
+	# say STDERR "Message: $message_body";
+
+	foreach my $to_email (@{$config->{ notification_emails }->{ recipients }})
+	{
+	    my $email = Email::MIME->create(
+	        header_str => [
+	            From    => $from_email,
+	            To      => $to_email,
+	            Subject => $subject,
+	        ],
+	        attributes => {
+	            encoding => 'quoted-printable',
+	            charset  => 'UTF-8',
+	        },
+	        body_str => $message_body
+	    );
+
+	    unless ( try_to_sendmail( $email ) )
+	    {
+	        say STDERR "Unable to send email to $to_email: $!";
+	        return 0;
+	    }
+	}
+
+	return 1;
 }
 
 1;

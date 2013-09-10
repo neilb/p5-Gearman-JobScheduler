@@ -23,7 +23,7 @@ sub main()
 	# $result = NinetyNineBottlesOfBeer->run_on_gearman({how_many_bottles => 3});
 	# $result = NinetyNineBottlesOfBeer->enqueue_on_gearman();
 
-	$result = NinetyNineBottlesOfBeer->enqueue_on_gearman({how_many_bottles => 3});
+	# $result = NinetyNineBottlesOfBeer->enqueue_on_gearman({how_many_bottles => 3});
 	# my $first = NinetyNineBottlesOfBeer->enqueue_on_gearman({how_many_bottles => 20});
 	# my $second = NinetyNineBottlesOfBeer->enqueue_on_gearman({how_many_bottles => 20});
 	# $result = NinetyNineBottlesOfBeer->enqueue_on_gearman({how_many_bottles => 2000});
@@ -31,7 +31,7 @@ sub main()
 
 	# $result = Addition->run_on_gearman({a => 2, b => 3});
 
-	# $result = AdditionAlwaysFails->run_on_gearman({a => 2, b => 3});
+	$result = AdditionAlwaysFails->run_on_gearman({a => 2, b => 3});
 	# $result = Addition->run_on_gearman({a => 2, b => 3});
 	# $result = AdditionAlwaysFails->enqueue_on_gearman({a => 2, b => 3});
 
@@ -60,6 +60,8 @@ sub main()
 	# sleep(5);
 	# $status = GJS->get_gearman_status($result);
 	# say STDERR "Status: " . Dumper($status);
+
+	# GJS->_send_email('This is a test', 'My message goes here.');
 }
 
 main();

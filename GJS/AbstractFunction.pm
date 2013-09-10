@@ -39,6 +39,10 @@ use IO::File;
 use Capture::Tiny ':all';
 use Time::HiRes;
 use Data::Dumper;
+use DateTime;
+use File::ReadBackwards;
+use Readonly;
+use Sys::Hostname;
 
 
 # used for capturing STDOUT and STDERR output of each job and timestamping it;
@@ -121,6 +125,18 @@ same and instead should be merged into one.
 
 =cut
 requires 'unique';
+
+
+=head2 (static) C<notify_on_failure()>
+
+Return true if the client / worker should send error report by email when the function fails.
+
+Returns true if the GJS client (in case C<run_locally()> is used) or worker
+(in case C<run_on_gearman()> or C<enqueue_on_gearman()> is being used) should
+send an email when the function fails to run.
+
+=cut
+requires 'notify_on_failure';
 
 
 =head1 HELPER SUBROUTINES
@@ -345,6 +361,51 @@ sub run_locally($;$$)
 
     if ( $error )
     {
+    	# Send email notification (if needed)
+    	eval {
+	    	if ($class->notify_on_failure()) {
+
+	    		my $now = DateTime->now()->strftime('%a, %d %b %Y %H:%M:%S %z');
+	    		my $hostname = hostname;
+
+	    		# Tail the log file
+	    		my Readonly $how_many_lines = 50;
+	    		my $last_lines = '';
+	    		my $lines_read;
+	    		my $bw = File::ReadBackwards->new( $log_path ) or die "Unable to open '$log_path' for tailing: $!";
+	    		for ($lines_read = 1; $lines_read <= $how_many_lines; ++$lines_read) {
+	    			my $log_line = $bw->readline;
+	    			if (defined $log_line) {
+	    				$last_lines = "$log_line$last_lines";
+	    			} else {
+	    				last;
+	    			}
+	    		}
+
+
+	    		say STDERR "Hello!";
+	    		GJS->_send_email('Function "' . $function_name . '" failed', <<EOF
+Gearman function "$function_name" failed while running on "$hostname" at $now because:
+
+<snip>
+$error
+</snip>
+
+Location of the log: $log_path
+
+Last $lines_read lines of the log:
+
+<snip>
+$last_lines
+</snip>
+EOF
+	    			);
+	    	}
+	    };
+	    if ($@) {
+	    	$error = "Failed to send notification email informing about the job failure: $@\nJob failed because: $error";
+	    }
+
     	# Print out to worker's STDERR and die()
     	LOGDIE("$error");
     }
@@ -559,8 +620,6 @@ no Moose;    # gets rid of scaffolding
 =item * rename to a name usable in Media Cloud infrastructure (make a proper Perl module out of it)
 
 =item * code formatting
-
-=item * Email reports about failed function runs
 
 =item * test timeout
 

@@ -45,6 +45,13 @@ sub unique()
 }
 
 
+# Notify by email on failure?
+sub notify_on_failure()
+{
+	return 1;
+}
+
+
 no Moose;    # gets rid of scaffolding
 
 

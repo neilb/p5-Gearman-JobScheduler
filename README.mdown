@@ -66,6 +66,14 @@ Return true if the function is "unique" (only for Gearman requests).
 Returns true if two or more jobs with the same parameters can not be run at the
 same and instead should be merged into one.
 
+## (static) `notify_on_failure()`
+
+Return true if the client / worker should send error report by email when the function fails.
+
+Returns true if the GJS client (in case `run_locally()` is used) or worker
+(in case `run_on_gearman()` or `enqueue_on_gearman()` is being used) should
+send an email when the function fails to run.
+
 # HELPER SUBROUTINES
 
 The following subroutines can be used by the deriving class.
@@ -131,8 +139,6 @@ enqueued successfully, `die()`s on error.
 
 - rename to a name usable in Media Cloud infrastructure (make a proper Perl module out of it)
 - code formatting
-- Email reports about failed function runs
-- Script to run all workers at the same time
 - test timeout
 - job priorities
 - store Gearman queue in PostgreSQL?
