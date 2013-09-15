@@ -97,7 +97,7 @@ Examples:
 The following subroutines can be used by "clients" in order to issue a Gearman
 function.
 
-## (static) `$class-`run\_locally(\[$args, $config\])>
+## (static) `$class->run_locally([$args, $config])`
 
 Run locally and right away, blocking the parent process until it gets finished.
 
@@ -111,7 +111,7 @@ send\_progress()
 
 Returns result (may be false of `undef`) on success, `die()`s on error
 
-## (static) `$class-`run\_on\_gearman(\[$args, $config\])>
+## (static) `$class->run_on_gearman([$args, $config])`
 
 Run on Gearman, wait for the task to complete, return the result; block the
 process until the job is complete.
@@ -124,7 +124,7 @@ function (serializable by the [Storable](http://search.cpan.org/perldoc?Storable
 
 Returns result (may be false of `undef`) on success, `die()`s on error
 
-## (static) `$class-`enqueue\_on\_gearman(\[$args, $config\])>
+## (static) `$class->enqueue_on_gearman([$args, $config])`
 
 Enqueue on Gearman, do not wait for the task to complete, return immediately;
 do not block the parent process until the job is complete.
