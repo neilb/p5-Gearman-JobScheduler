@@ -218,7 +218,8 @@ sub log_path_for_gearman_job($$;$)
 	# If the job is not running, the log path will not be available
 	my $job_status = job_status($gearman_job_handle, $config);
 	if ((! $job_status) or (! $job_status->{running})) {
-		warn "Job '$gearman_job_handle' is not running, so the path returned might not yet exist. Try again later.";
+		WARN("Job '$gearman_job_handle' is not running; either it is finished already or hasn't started yet. "
+		   . "Thus, the path returned might not yet exist.");
 	}
 
 	my $gearman_job_id = _gearman_job_id_from_handle($gearman_job_handle);
