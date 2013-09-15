@@ -1,7 +1,7 @@
 # NAME
 
-`GJS::AbstractFunction` - An abstract class for a Gearman "function" which
-is to be derived by working Gearman "functions".
+`Gearman::JobScheduler::AbstractFunction` - An abstract class for a Gearman
+"function" which is to be derived by working Gearman "functions".
 
 
 
@@ -131,7 +131,7 @@ Parameters:
 
 - (optional) `$args` (hashref), arguments required for running the
 Gearman function  (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
-- (optional) instance of GJS::Configuration to be used by the worker
+- (optional) instance of Gearman::JobScheduler::Configuration to be used by the worker
 - (optional, internal) instance of Gearman::XS::Job to be later used by
 send\_progress()
 
@@ -146,7 +146,7 @@ Parameters:
 
 - (optional) `$args` (hashref), arguments needed for running the Gearman
 function (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
-- (optional) Instance of GJS::Configuration to be used by the client.
+- (optional) Instance of Gearman::JobScheduler::Configuration to be used by the client.
 
 Returns result (may be false of `undef`) on success, `die()`s on error
 
@@ -159,7 +159,7 @@ Parameters:
 
 - (optional) `$args` (hashref), arguments needed for running the Gearman
 function (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
-- (optional) Instance of GJS::Configuration to be used by the client.
+- (optional) Instance of Gearman::JobScheduler::Configuration to be used by the client.
 
 Returns Gearman-provided string job identifier (Gearman job ID) if the job was
 enqueued successfully, `die()`s on error.
@@ -170,3 +170,4 @@ enqueued successfully, `die()`s on error.
 - code formatting
 - test timeout
 - store Gearman queue in PostgreSQL?
+- unit tests
