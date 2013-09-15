@@ -1,0 +1,50 @@
+---
+name: Gearman-JobScheduler
+version: 0.01
+author:
+  - 'Linas Valiukas <linas dot valiukas at gmail dot com>'
+abstract: Gearman job scheduler
+license: perl
+resources:
+  license: http://dev.perl.org/licenses/
+requires:
+  Gearman::XS: 0,
+  Data::Compare: 0,
+  Data::Dumper: 0,
+  Storable: 0,
+  Data::UUID: 0,
+  Sys::Path: 0,
+  File::Path: 0,
+  Carp: 0,
+  Email::MIME: 0,
+  Email::Sender::Simple: 0,
+  Log::Log4perl: 0,
+  Modern::Perl: 0,
+  Moose: 0,
+  Moose::Role: 0,
+  IO::File: 0,
+  Capture::Tiny: 0,
+  Time::HiRes: 0,
+  DateTime: 0,
+  File::ReadBackwards: 0,
+  Readonly: 0,
+  Sys::Hostname: 0,
+  Test::More: 0
+  perl: 5.12.0
+provides:
+  Gearman::JobScheduler:
+    file: lib/Gearman/JobScheduler.pm
+    version: 0.01
+  Gearman::JobScheduler::AbstractFunction:
+    file: lib/Gearman/JobScheduler/AbstractFunction.pm
+    version: 0.01
+  Gearman::JobScheduler::Configuration:
+    file: lib/Gearman/JobScheduler/Configuration.pm
+    version: 0.01
+  Gearman::JobScheduler::ErrorLogTrapper:
+    file: lib/Gearman/JobScheduler/ErrorLogTrapper.pm
+    version: 0.01
+generated_by: Module::Build version 0.2808
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.2.html
+  version: 1.2

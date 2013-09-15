@@ -1,0 +1,16 @@
+Build.PL
+Changes
+lib/Gearman/JobScheduler/AbstractFunction.pm
+lib/Gearman/JobScheduler/Configuration.pm
+lib/Gearman/JobScheduler/ErrorLogTrapper.pm
+lib/Gearman/JobScheduler.pm
+samples/Addition.pm
+samples/AdditionAlwaysFails.pm
+samples/NinetyNineBottlesOfBeer.pm
+script/gjs_sample_client.pl
+script/gjs_update_readme.sh
+script/gjs_worker.pl
+Makefile.PL
+MANIFEST
+META.yml			Module meta-data (added by MakeMaker)
+README.mdown

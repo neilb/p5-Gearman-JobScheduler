@@ -5,6 +5,8 @@ C<Gearman::JobScheduler> - Gearman utilities.
 =cut
 package Gearman::JobScheduler;
 
+$VERSION = '0.01';
+
 use strict;
 use warnings;
 use Modern::Perl "2012";

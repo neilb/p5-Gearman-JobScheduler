@@ -4,3 +4,11 @@
 # POD
 pod2htm*.tmp
 
+# Perl module
+blib/
+_build/
+Makefile
+MYMETA.yml
+MYMETA.json
+Build
+
