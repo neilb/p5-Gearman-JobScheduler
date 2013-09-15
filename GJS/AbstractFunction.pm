@@ -24,6 +24,7 @@ package GJS::AbstractFunction;
 use strict;
 use warnings;
 use Modern::Perl "2012";
+use feature qw(switch);
 
 use Moose::Role;
 
@@ -45,11 +46,9 @@ use File::ReadBackwards;
 use Readonly;
 use Sys::Hostname;
 
-
 # used for capturing STDOUT and STDERR output of each job and timestamping it;
 # initialized before each job
 use Log::Log4perl qw(:easy);
-
 
 
 =head1 ABSTRACT INTERFACE
@@ -104,6 +103,8 @@ Return the timeout of each job.
 
 Returns the timeout (in seconds) of each job or 0 if there's no timeout.
 
+Default implementation of this subroutine returns 0 (no timeout).
+
 =cut
 sub job_timeout()
 {
@@ -121,6 +122,8 @@ number of retries is set to 3, the job will be attempted 4 four times in total.
 
 Returns 0 if the job should not be retried (attempted only once).
 
+Default implementation of this subroutine returns 0 (no retries).
+
 =cut
 sub retries()
 {
@@ -135,6 +138,8 @@ Return true if the function is "unique" (only for Gearman requests).
 
 Returns true if two or more jobs with the same parameters can not be run at the
 same and instead should be merged into one.
+
+Default implementation of this subroutine returns "true".
 
 =cut
 sub unique()
@@ -154,11 +159,47 @@ Returns true if the GJS client (in case C<run_locally()> is used) or worker
 (in case C<run_on_gearman()> or C<enqueue_on_gearman()> is being used) should
 send an email when the function fails to run.
 
+Default implementation of this subroutine returns "true".
+
 =cut
 sub notify_on_failure()
 {
 	# By default jobs will send notifications when they fail
 	return 1;
+}
+
+
+=head3 (static) C<priority()>
+
+Return priority of the job ("low", "normal" or "high"). This will influence
+Gearman's queueing mechanism and prioritize "high priority" jobs.
+
+Returns one of the three constants:
+
+=over 4
+
+=item * C<GJS_JOB_PRIORITY_LOW()>, if the job is considered of "low priority".
+
+=item * C<GJS_JOB_PRIORITY_NORMAL()> if the job is considered of "normal priority".
+
+=item * C<GJS_JOB_PRIORITY_HIGH()> if the job is considered of "high priority".
+
+=back
+
+Default implementation of this subroutine returns C<GJS_JOB_PRIORITY_NORMAL()>
+("normal priority" job).
+
+=cut
+
+# Gearman job priorities (subroutines instead of constants because exporting
+# constants with Moose in place is painful)
+sub GJS_JOB_PRIORITY_LOW { 'low' }
+sub GJS_JOB_PRIORITY_NORMAL { 'normal' }
+sub GJS_JOB_PRIORITY_HIGH { 'high' }
+
+sub priority()
+{
+	return GJS_JOB_PRIORITY_NORMAL();
 }
 
 
@@ -493,15 +534,27 @@ sub run_on_gearman($;$$)
 	# so we pass 0 instead
 	$args_serialized ||= 0;
 
-	# Do the job
-	my ($ret, $result);
+	# Choose the client subroutine to use (based on the priority)
+	my $client_do_ref = undef;
+	given ($class->priority()) {
+		when(GJS_JOB_PRIORITY_LOW()) { $client_do_ref = sub { $client->do_low(@_) }; }
+		when(GJS_JOB_PRIORITY_NORMAL()) { $client_do_ref = sub { $client->do(@_) }; }
+		when(GJS_JOB_PRIORITY_HIGH()) { $client_do_ref = sub { $client->do_high(@_) }; }
+		default { die "Unknown job priority: " . $class->priority() }
+	}
+
+	# Client arguments
+	my @client_args;
 	if ($class->unique()) {
 		# If the job is set to be "unique", we need to pass a "unique identifier"
 		# to Gearman so that it knows which jobs to merge into one
-		($ret, $result) = $client->do($function_name, $args_serialized, GJS::_unique_job_id($function_name, $args));
+		@client_args = ($function_name, $args_serialized, GJS::_unique_job_id($function_name, $args));
 	} else {
-		($ret, $result) = $client->do($function_name, $args_serialized);
+		@client_args = ($function_name, $args_serialized);
 	}
+
+	# Do the job
+	my ($ret, $result) = &{$client_do_ref}(@client_args);
 	unless ($ret == GEARMAN_SUCCESS) {
 		die "Gearman failed: " . $client->error();
 	}
@@ -567,14 +620,27 @@ sub enqueue_on_gearman($;$$)
 	# so we pass 0 instead
 	$args_serialized ||= 0;
 
-	my ($ret, $gearman_job_id);
+	# Choose the client subroutine to use (based on the priority)
+	my $client_do_bg_ref = undef;
+	given ($class->priority()) {
+		when(GJS_JOB_PRIORITY_LOW()) { $client_do_bg_ref = sub { $client->do_low_background(@_) }; }
+		when(GJS_JOB_PRIORITY_NORMAL()) { $client_do_bg_ref = sub { $client->do_background(@_) }; }
+		when(GJS_JOB_PRIORITY_HIGH()) { $client_do_bg_ref = sub { $client->do_high_background(@_) }; }
+		default { die "Unknown job priority: " . $class->priority() }
+	}
+
+	# Client arguments
+	my @client_args;
 	if ($class->unique()) {
 		# If the job is set to be "unique", we need to pass a "unique identifier"
 		# to Gearman so that it knows which jobs to merge into one
-		($ret, $gearman_job_id) = $client->do_background($function_name, $args_serialized, GJS::_unique_job_id($function_name, $args));
+		@client_args = ($function_name, $args_serialized, GJS::_unique_job_id($function_name, $args));
 	} else {
-		($ret, $gearman_job_id) = $client->do_background($function_name, $args_serialized);
+		@client_args = ($function_name, $args_serialized);
 	}
+
+	# Enqueue the job
+	my ($ret, $gearman_job_id) = &{$client_do_bg_ref}(@client_args);
 	unless ($ret == GEARMAN_SUCCESS) {
 		die "Gearman failed while doing task in background: " . $client->error();
 	}
@@ -652,6 +718,7 @@ sub _reset_log4perl()
 	});
 }
 
+
 no Moose;    # gets rid of scaffolding
 
 1;
@@ -665,8 +732,6 @@ no Moose;    # gets rid of scaffolding
 =item * code formatting
 
 =item * test timeout
-
-=item * job priorities
 
 =item * store Gearman queue in PostgreSQL?
 

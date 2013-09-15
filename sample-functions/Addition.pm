@@ -25,6 +25,11 @@ sub run($;$)
 	return $a + $b;
 }
 
+sub priority()
+{
+	return GJS_JOB_PRIORITY_LOW();
+}
+
 
 no Moose;    # gets rid of scaffolding
 

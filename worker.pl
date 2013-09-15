@@ -73,6 +73,8 @@ sub run_worker($$)
 		LOGDIE("Unable to add Gearman servers: "  . $worker->error());
 	}
 
+	INFO("Job priority: " . $gearman_function_name->priority());
+
 	$ret = $worker->add_function(
 		$gearman_function_name,
 		$gearman_function_name->job_timeout() * 1000,	# in milliseconds

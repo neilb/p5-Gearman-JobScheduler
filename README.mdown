@@ -54,6 +54,8 @@ Return the timeout of each job.
 
 Returns the timeout (in seconds) of each job or 0 if there's no timeout.
 
+Default implementation of this subroutine returns 0 (no timeout).
+
 ### (static) `retries()`
 
 Return the number of retries for each job.
@@ -63,12 +65,16 @@ number of retries is set to 3, the job will be attempted 4 four times in total.
 
 Returns 0 if the job should not be retried (attempted only once).
 
+Default implementation of this subroutine returns 0 (no retries).
+
 ### (static) `unique()`
 
 Return true if the function is "unique" (only for Gearman requests).
 
 Returns true if two or more jobs with the same parameters can not be run at the
 same and instead should be merged into one.
+
+Default implementation of this subroutine returns "true".
 
 ### (static) `notify_on_failure()`
 
@@ -77,6 +83,22 @@ Return true if the client / worker should send error report by email when the fu
 Returns true if the GJS client (in case `run_locally()` is used) or worker
 (in case `run_on_gearman()` or `enqueue_on_gearman()` is being used) should
 send an email when the function fails to run.
+
+Default implementation of this subroutine returns "true".
+
+### (static) `priority()`
+
+Return priority of the job ("low", "normal" or "high"). This will influence
+Gearman's queueing mechanism and prioritize "high priority" jobs.
+
+Returns one of the three constants:
+
+- `GJS_JOB_PRIORITY_LOW()`, if the job is considered of "low priority".
+- `GJS_JOB_PRIORITY_NORMAL()` if the job is considered of "normal priority".
+- `GJS_JOB_PRIORITY_HIGH()` if the job is considered of "high priority".
+
+Default implementation of this subroutine returns `GJS_JOB_PRIORITY_NORMAL()`
+("normal priority" job).
 
 # HELPER SUBROUTINES
 
@@ -147,5 +169,4 @@ enqueued successfully, `die()`s on error.
 - rename to a name usable in Media Cloud infrastructure (make a proper Perl module out of it)
 - code formatting
 - test timeout
-- job priorities
 - store Gearman queue in PostgreSQL?
