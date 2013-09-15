@@ -22,36 +22,6 @@ sub run($;$)
 }
 
 
-# Return individual job's timeout (0 for no timeout)
-sub job_timeout()
-{
-	# No timeout
-	return 0;
-}
-
-
-# Return a number of retries (0 for no retries)
-sub retries()
-{
-	# The job will be attempted 4 times in total
-	return 3;
-}
-
-
-# Don't allow two or more jobs with the same parameters to run at once?
-sub unique()
-{
-	return 1;
-}
-
-
-# Notify by email on failure?
-sub notify_on_failure()
-{
-	return 1;
-}
-
-
 no Moose;    # gets rid of scaffolding
 
 

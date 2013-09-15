@@ -19,7 +19,9 @@ is to be derived by working Gearman "functions".
 
 The following subroutines must be implemented by the subclasses of this class.
 
-## `run($self, $args)`
+## REQUIRED
+
+### `run($self, $args)`
 
 Run the job.
 
@@ -44,13 +46,15 @@ Provides progress reports when available:
 
 Writes log to `STDOUT` or `STDERR` (preferably the latter).
 
-## (static) `job_timeout()`
+## OPTIONAL
+
+### (static) `job_timeout()`
 
 Return the timeout of each job.
 
 Returns the timeout (in seconds) of each job or 0 if there's no timeout.
 
-## (static) `retries()`
+### (static) `retries()`
 
 Return the number of retries for each job.
 
@@ -59,14 +63,14 @@ number of retries is set to 3, the job will be attempted 4 four times in total.
 
 Returns 0 if the job should not be retried (attempted only once).
 
-## (static) `unique()`
+### (static) `unique()`
 
 Return true if the function is "unique" (only for Gearman requests).
 
 Returns true if two or more jobs with the same parameters can not be run at the
 same and instead should be merged into one.
 
-## (static) `notify_on_failure()`
+### (static) `notify_on_failure()`
 
 Return true if the client / worker should send error report by email when the function fails.
 
@@ -145,4 +149,3 @@ enqueued successfully, `die()`s on error.
 - test timeout
 - job priorities
 - store Gearman queue in PostgreSQL?
-- default implementations of helper subroutines

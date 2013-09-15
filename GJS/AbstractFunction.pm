@@ -56,7 +56,9 @@ use Log::Log4perl qw(:easy);
 
 The following subroutines must be implemented by the subclasses of this class.
 
-=head2 C<run($self, $args)>
+=head2 REQUIRED
+
+=head3 C<run($self, $args)>
 
 Run the job.
 
@@ -94,17 +96,23 @@ Writes log to C<STDOUT> or C<STDERR> (preferably the latter).
 requires 'run';
 
 
-=head2 (static) C<job_timeout()>
+=head2 OPTIONAL
+
+=head3 (static) C<job_timeout()>
 
 Return the timeout of each job.
 
 Returns the timeout (in seconds) of each job or 0 if there's no timeout.
 
 =cut
-requires 'job_timeout';
+sub job_timeout()
+{
+	# By default, individual job never times out
+	return 0;
+}
 
 
-=head2 (static) C<retries()>
+=head3 (static) C<retries()>
 
 Return the number of retries for each job.
 
@@ -114,10 +122,14 @@ number of retries is set to 3, the job will be attempted 4 four times in total.
 Returns 0 if the job should not be retried (attempted only once).
 
 =cut
-requires 'retries';
+sub retries()
+{
+	# By default the job will not be retried if it fails
+	return 0;
+}
 
 
-=head2 (static) C<unique()>
+=head3 (static) C<unique()>
 
 Return true if the function is "unique" (only for Gearman requests).
 
@@ -125,10 +137,16 @@ Returns true if two or more jobs with the same parameters can not be run at the
 same and instead should be merged into one.
 
 =cut
-requires 'unique';
+sub unique()
+{
+	# By default the jobs are "unique", e.g. if there's already an
+	# "Addition({operand_a => 2, operand_b => 3})" job running, a new one won't
+	# be initialized
+	return 1;
+}
 
 
-=head2 (static) C<notify_on_failure()>
+=head3 (static) C<notify_on_failure()>
 
 Return true if the client / worker should send error report by email when the function fails.
 
@@ -137,7 +155,11 @@ Returns true if the GJS client (in case C<run_locally()> is used) or worker
 send an email when the function fails to run.
 
 =cut
-requires 'notify_on_failure';
+sub notify_on_failure()
+{
+	# By default jobs will send notifications when they fail
+	return 1;
+}
 
 
 =head1 HELPER SUBROUTINES
@@ -192,7 +214,7 @@ sub set_progress($$$)
 The following subroutines can be used by "clients" in order to issue a Gearman
 function.
 
-=head2 (static) C<$class->run_locally([$args, $config])>
+=head2 (static) C<$class-E<gt>run_locally([$args, $config])>
 
 Run locally and right away, blocking the parent process until it gets finished.
 
@@ -423,7 +445,7 @@ EOF
 }
 
 
-=head2 (static) C<$class->run_on_gearman([$args, $config])>
+=head2 (static) C<$class-E<gt>run_on_gearman([$args, $config])>
 
 Run on Gearman, wait for the task to complete, return the result; block the
 process until the job is complete.
@@ -496,7 +518,7 @@ sub run_on_gearman($;$$)
 }
 
 
-=head2 (static) C<$class->enqueue_on_gearman([$args, $config])>
+=head2 (static) C<$class-E<gt>enqueue_on_gearman([$args, $config])>
 
 Enqueue on Gearman, do not wait for the task to complete, return immediately;
 do not block the parent process until the job is complete.
@@ -647,7 +669,5 @@ no Moose;    # gets rid of scaffolding
 =item * job priorities
 
 =item * store Gearman queue in PostgreSQL?
-
-=item * default implementations of helper subroutines
 
 =back
