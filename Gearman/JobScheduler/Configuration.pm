@@ -1,4 +1,4 @@
-package GJS::Configuration;
+package Gearman::JobScheduler::Configuration;
 
 #
 # GJS default configuration

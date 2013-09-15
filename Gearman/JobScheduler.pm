@@ -1,15 +1,15 @@
 =head1 NAME
 
-C<GJS> - Gearman utilities.
+C<Gearman::JobScheduler> - Gearman utilities.
 
 =cut
-package GJS;
+package Gearman::JobScheduler;
 
 use strict;
 use warnings;
 use Modern::Perl "2012";
 
-use GJS::Configuration;
+use Gearman::JobScheduler::Configuration;
 
 use Gearman::XS qw(:constants);
 use Gearman::XS::Client;
@@ -48,7 +48,7 @@ use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
 
 
-=head2 (static) C<get_gearman_status($gearman_job_id[, $config])>
+=head2 (static) C<job_status($gearman_job_id[, $config])>
 
 Get Gearman job status.
 
@@ -58,7 +58,7 @@ Parameters:
 
 =item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
-=item * (optional) Instance of GJS::Configuration
+=item * (optional) Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -84,14 +84,14 @@ Returns hashref with the job status, e.g.:
 Returns undef if the job ID was not found; dies on error.
 
 =cut
-sub get_gearman_status($;$)
+sub job_status($;$)
 {
 	my ($gearman_job_id, $config) = @_;
 
 	unless ($config) {
 		# Using default configuration
 		DEBUG("Will use default configuration");
-		$config = GJS::Configuration->new();
+		$config = Gearman::JobScheduler::Configuration->new();
 	}
 
 	my $client = _gearman_xs_client($config);
@@ -128,7 +128,7 @@ Parameters:
 
 =item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
-=item * (optional) Instance of GJS::Configuration
+=item * (optional) Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -144,7 +144,7 @@ sub cancel_gearman_job($;$)
 	unless ($config) {
 		# Using default configuration
 		DEBUG("Will use default configuration");
-		$config = GJS::Configuration->new();
+		$config = Gearman::JobScheduler::Configuration->new();
 	}
 
 	my $gearman_job_id = _gearman_job_id_from_handle($gearman_job_handle);
@@ -195,7 +195,7 @@ Parameters:
 
 =item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
-=item * (optional) Instance of GJS::Configuration
+=item * (optional) Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -212,11 +212,11 @@ sub log_path_for_gearman_job($$;$)
 	unless ($config) {
 		# Using default configuration
 		DEBUG("Will use default configuration");
-		$config = GJS::Configuration->new();
+		$config = Gearman::JobScheduler::Configuration->new();
 	}
 
 	# If the job is not running, the log path will not be available
-	my $job_status = get_gearman_status($gearman_job_handle, $config);
+	my $job_status = job_status($gearman_job_handle, $config);
 	if ((! $job_status) or (! $job_status->{running})) {
 		warn "Job '$gearman_job_handle' is not running, so the path returned might not yet exist. Try again later.";
 	}
@@ -546,7 +546,7 @@ Hello,
 $message
 
 -- 
-Gearman Job Scheduler (GJS)
+Gearman::JobScheduler
 
 EOF
 

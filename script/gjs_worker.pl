@@ -5,10 +5,10 @@ use warnings;
 use Modern::Perl "2012";
 
 use FindBin;
-use lib "$FindBin::Bin/sample-functions";
+use lib "$FindBin::Bin/../samples";
 
-use GJS;
-use GJS::Configuration;
+use Gearman::JobScheduler;
+use Gearman::JobScheduler::Configuration;
 
 use Gearman::XS qw(:constants);
 use Gearman::XS::Worker;
@@ -142,7 +142,7 @@ sub run_all_workers($$)
 sub main()
 {
 	# Default configuration
-	my $config = GJS::Configuration->new();
+	my $config = Gearman::JobScheduler::Configuration->new();
 
 
 	# Override default configuration options from the command line if needed

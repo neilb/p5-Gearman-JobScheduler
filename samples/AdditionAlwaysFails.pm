@@ -5,7 +5,7 @@ use warnings;
 use Modern::Perl "2012";
 
 use Moose;
-with 'GJS::AbstractFunction';
+with 'Gearman::JobScheduler::AbstractFunction';
 
 
 # Run job

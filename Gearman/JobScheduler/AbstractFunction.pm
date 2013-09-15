@@ -1,7 +1,7 @@
 =head1 NAME
 
-C<GJS::AbstractFunction> - An abstract class for a Gearman "function" which
-is to be derived by working Gearman "functions".
+C<Gearman::JobScheduler::AbstractFunction> - An abstract class for a Gearman
+"function" which is to be derived by working Gearman "functions".
 
 
 =head1 LINGO
@@ -19,7 +19,7 @@ An instance of the Gearman function doing the actual job with specific parameter
 =back
 
 =cut
-package GJS::AbstractFunction;
+package Gearman::JobScheduler::AbstractFunction;
 
 use strict;
 use warnings;
@@ -28,9 +28,9 @@ use feature qw(switch);
 
 use Moose::Role;
 
-require 'GJS.pm';
-require 'GJS/Configuration.pm';
-require 'GJS/ErrorLogTrapper.pm';
+use Gearman::JobScheduler;	# helper subroutines
+use Gearman::JobScheduler::Configuration;
+use Gearman::JobScheduler::ErrorLogTrapper;
 
 use Gearman::XS qw(:constants);
 use Gearman::XS::Client;
@@ -266,7 +266,7 @@ Parameters:
 =item * (optional) C<$args> (hashref), arguments required for running the
 Gearman function  (serializable by the L<Storable> module)
 
-=item * (optional) instance of GJS::Configuration to be used by the worker
+=item * (optional) instance of Gearman::JobScheduler::Configuration to be used by the worker
 
 =item * (optional, internal) instance of Gearman::XS::Job to be later used by
 send_progress()
@@ -290,7 +290,7 @@ sub run_locally($;$$$)
 	unless ($config) {
 		# Using default configuration
 		DEBUG("Will use default configuration");
-		$config = GJS::Configuration->new();
+		$config = Gearman::JobScheduler::Configuration->new();
 	}
 
 	# say STDERR "Running locally";
@@ -309,15 +309,15 @@ sub run_locally($;$$$)
 		unless (defined $gearman_job->handle()) {
 			die "Unable to find a Gearman job ID to be used for logging";
 		}
-		$gjs_job_id = GJS::_unique_path_job_id($function_name, $args, $gearman_job->handle());
+		$gjs_job_id = Gearman::JobScheduler::_unique_path_job_id($function_name, $args, $gearman_job->handle());
 	} else {
-		$gjs_job_id = GJS::_unique_path_job_id($function_name, $args);
+		$gjs_job_id = Gearman::JobScheduler::_unique_path_job_id($function_name, $args);
 	}
 	unless ($gjs_job_id) {
 		die "Unable to determine unique GJS job ID";
 	}
 
-	my $log_path = GJS::_init_and_return_worker_log_dir($function_name, $config) . $gjs_job_id . '.log';
+	my $log_path = Gearman::JobScheduler::_init_and_return_worker_log_dir($function_name, $config) . $gjs_job_id . '.log';
 	my $starting_job_message;
 	if ( -f $log_path ) {
 		# Worker crashed last time and now tries to write to the same log path
@@ -341,8 +341,8 @@ sub run_locally($;$$$)
 
 
 	# Tie STDOUT / STDERR to Log4perl handler
-	tie *STDOUT, "GJS::ErrorLogTrapper";
-	tie *STDERR, "GJS::ErrorLogTrapper";
+	tie *STDOUT, "Gearman::JobScheduler::ErrorLogTrapper";
+	tie *STDERR, "Gearman::JobScheduler::ErrorLogTrapper";
 
 	my $result;
 
@@ -471,7 +471,7 @@ Last $lines_read lines of the log:
 $last_lines
 </snip>
 EOF
-	    		GJS::_send_email($message_subject, $message_body, $config);
+	    		Gearman::JobScheduler::_send_email($message_subject, $message_body, $config);
 	    	}
 	    };
 	    if ($@) {
@@ -498,7 +498,7 @@ Parameters:
 =item * (optional) C<$args> (hashref), arguments needed for running the Gearman
 function (serializable by the L<Storable> module)
 
-=item * (optional) Instance of GJS::Configuration to be used by the client.
+=item * (optional) Instance of Gearman::JobScheduler::Configuration to be used by the client.
 
 =back
 
@@ -518,17 +518,17 @@ sub run_on_gearman($;$$)
 	unless ($config) {
 		# Using default configuration
 		DEBUG("Will use default configuration");
-		$config = GJS::Configuration->new();
+		$config = Gearman::JobScheduler::Configuration->new();
 	}
 
-	my $client = GJS::_gearman_xs_client($config);
+	my $client = Gearman::JobScheduler::_gearman_xs_client($config);
 	my $function_name = $class->_function_name;
 	unless ($function_name) {
 		die "Unable to determine function name.";
 	}
 
 	# Run
-	my $args_serialized = GJS::_serialize_hashref($args);
+	my $args_serialized = Gearman::JobScheduler::_serialize_hashref($args);
 
 	# Gearman::XS::Client seems to not like undefined or empty workload()
 	# so we pass 0 instead
@@ -548,7 +548,7 @@ sub run_on_gearman($;$$)
 	if ($class->unique()) {
 		# If the job is set to be "unique", we need to pass a "unique identifier"
 		# to Gearman so that it knows which jobs to merge into one
-		@client_args = ($function_name, $args_serialized, GJS::_unique_job_id($function_name, $args));
+		@client_args = ($function_name, $args_serialized, Gearman::JobScheduler::_unique_job_id($function_name, $args));
 	} else {
 		@client_args = ($function_name, $args_serialized);
 	}
@@ -561,7 +561,7 @@ sub run_on_gearman($;$$)
 
 	# Deserialize the results (because they were serialized and put into
 	# hashref by _run_locally_from_gearman_worker())
-	my $result_deserialized = GJS::_unserialize_hashref($result);
+	my $result_deserialized = Gearman::JobScheduler::_unserialize_hashref($result);
 	if (ref $result_deserialized eq 'HASH') {
 		return $result_deserialized->{result};
 	} else {
@@ -583,7 +583,7 @@ Parameters:
 =item * (optional) C<$args> (hashref), arguments needed for running the Gearman
 function (serializable by the L<Storable> module)
 
-=item * (optional) Instance of GJS::Configuration to be used by the client.
+=item * (optional) Instance of Gearman::JobScheduler::Configuration to be used by the client.
 
 =back
 
@@ -604,17 +604,17 @@ sub enqueue_on_gearman($;$$)
 	unless ($config) {
 		# Using default configuration
 		DEBUG("Will use default configuration");
-		$config = GJS::Configuration->new();
+		$config = Gearman::JobScheduler::Configuration->new();
 	}
 
-	my $client = GJS::_gearman_xs_client($config);
+	my $client = Gearman::JobScheduler::_gearman_xs_client($config);
 	my $function_name = $class->_function_name;
 	unless ($function_name) {
 		die "Unable to determine function name.";
 	}
 
 	# Add task
-	my $args_serialized = GJS::_serialize_hashref($args);
+	my $args_serialized = Gearman::JobScheduler::_serialize_hashref($args);
 
 	# Gearman::XS::Client seems to not like undefined or empty workload()
 	# so we pass 0 instead
@@ -634,7 +634,7 @@ sub enqueue_on_gearman($;$$)
 	if ($class->unique()) {
 		# If the job is set to be "unique", we need to pass a "unique identifier"
 		# to Gearman so that it knows which jobs to merge into one
-		@client_args = ($function_name, $args_serialized, GJS::_unique_job_id($function_name, $args));
+		@client_args = ($function_name, $args_serialized, Gearman::JobScheduler::_unique_job_id($function_name, $args));
 	} else {
 		@client_args = ($function_name, $args_serialized);
 	}
@@ -669,7 +669,7 @@ sub _run_locally_from_gearman_worker($$;$)
 	}
 
 	# Args were serialized by run_on_gearman()
-	my $args = GJS::_unserialize_hashref($gearman_job->workload());
+	my $args = Gearman::JobScheduler::_unserialize_hashref($gearman_job->workload());
 
 	my $result;
 	eval {
@@ -681,7 +681,7 @@ sub _run_locally_from_gearman_worker($$;$)
 
 	# Create a hashref and serialize result because it's going to be passed over Gearman
 	$result = { 'result' => $result };
-	my $result_serialized = GJS::_serialize_hashref($result);
+	my $result_serialized = Gearman::JobScheduler::_serialize_hashref($result);
 
 	return $result_serialized;
 }
@@ -734,5 +734,7 @@ no Moose;    # gets rid of scaffolding
 =item * test timeout
 
 =item * store Gearman queue in PostgreSQL?
+
+=item * unit tests
 
 =back
