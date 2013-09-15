@@ -97,7 +97,7 @@ Examples:
 The following subroutines can be used by "clients" in order to issue a Gearman
 function.
 
-## (static) `run_locally($args)`
+## (static) `$class-`run\_locally(\[$args, $config\])>
 
 Run locally and right away, blocking the parent process until it gets finished.
 
@@ -105,12 +105,13 @@ Parameters:
 
 - (optional) `$args` (hashref), arguments required for running the
 Gearman function  (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
+- (optional) instance of GJS::Configuration to be used by the worker
 - (optional, internal) instance of Gearman::XS::Job to be later used by
 send\_progress()
 
 Returns result (may be false of `undef`) on success, `die()`s on error
 
-## (static) `run_on_gearman($args)`
+## (static) `$class-`run\_on\_gearman(\[$args, $config\])>
 
 Run on Gearman, wait for the task to complete, return the result; block the
 process until the job is complete.
@@ -119,10 +120,11 @@ Parameters:
 
 - (optional) `$args` (hashref), arguments needed for running the Gearman
 function (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
+- (optional) Instance of GJS::Configuration to be used by the client.
 
 Returns result (may be false of `undef`) on success, `die()`s on error
 
-## (static) `enqueue_on_gearman($args)`
+## (static) `$class-`enqueue\_on\_gearman(\[$args, $config\])>
 
 Enqueue on Gearman, do not wait for the task to complete, return immediately;
 do not block the parent process until the job is complete.
@@ -131,6 +133,7 @@ Parameters:
 
 - (optional) `$args` (hashref), arguments needed for running the Gearman
 function (serializable by the [Storable](http://search.cpan.org/perldoc?Storable) module)
+- (optional) Instance of GJS::Configuration to be used by the client.
 
 Returns Gearman-provided string job identifier (Gearman job ID) if the job was
 enqueued successfully, `die()`s on error.
@@ -142,5 +145,4 @@ enqueued successfully, `die()`s on error.
 - test timeout
 - job priorities
 - store Gearman queue in PostgreSQL?
-- get rid of configuration (easier integration with the rest of the system)
 - default implementations of helper subroutines

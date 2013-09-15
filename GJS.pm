@@ -5,11 +5,11 @@ C<GJS> - Gearman utilities.
 =cut
 package GJS;
 
-use YAML qw(LoadFile);
-
 use strict;
 use warnings;
 use Modern::Perl "2012";
+
+use GJS::Configuration;
 
 use Gearman::XS qw(:constants);
 use Gearman::XS::Client;
@@ -28,20 +28,27 @@ use Data::UUID;
 use Sys::Path;
 use File::Path qw(make_path);
 
+use Carp;
+
 use Email::MIME;
 use Email::Sender::Simple qw(try_to_sendmail);
+
+use Log::Log4perl qw(:easy);
+Log::Log4perl->easy_init({
+	level => $DEBUG,
+	utf8=>1,
+	layout => "%d{ISO8601} [%P]: %m%n"
+});
 
 
 # flush sockets after every write
 $| = 1;
 
-use constant GJS_CONFIG_FILE => 'config.yml';
-
 use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
 
 
-=head2 (static) C<get_gearman_status($gearman_job_id)>
+=head2 (static) C<get_gearman_status($gearman_job_id[, $config])>
 
 Get Gearman job status.
 
@@ -50,6 +57,8 @@ Parameters:
 =over 4
 
 =item * Gearman job ID (e.g. "H:localhost.localdomain:8")
+
+=item * (optional) Instance of GJS::Configuration
 
 =back
 
@@ -75,20 +84,21 @@ Returns hashref with the job status, e.g.:
 Returns undef if the job ID was not found; dies on error.
 
 =cut
-sub get_gearman_status($$)
+sub get_gearman_status($;$)
 {
-	my $class = shift;
-	my $gearman_job_id = shift;
+	my ($gearman_job_id, $config) = @_;
 
-	if (ref $class) {
-		die "Use this subroutine as a static method, e.g. GJS->get_gearman_status()";
+	unless ($config) {
+		# Using default configuration
+		DEBUG("Will use default configuration");
+		$config = GJS::Configuration->new();
 	}
 
-	my $client = $class->_gearman_xs_client;
+	my $client = _gearman_xs_client($config);
 	my ($ret, $known, $running, $numerator, $denominator) = $client->job_status($gearman_job_id);
 
 	unless ($ret == GEARMAN_SUCCESS) {
-		die "Unable to determine status for Gearman job '$gearman_job_id': " . $client->error();
+		LOGDIE("Unable to determine status for Gearman job '$gearman_job_id': " . $client->error());
 	}
 
 	unless ($known) {
@@ -106,7 +116,7 @@ sub get_gearman_status($$)
 }
 
 
-=head2 (static) C<cancel_gearman_job($gearman_job_id)>
+=head2 (static) C<cancel_gearman_job($gearman_job_id[, $config])>
 
 (Attempt to) cancel a Gearman job.
 
@@ -118,6 +128,8 @@ Parameters:
 
 =item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
+=item * (optional) Instance of GJS::Configuration
+
 =back
 
 Returns 1 if cancelling was successful, 0 otherwise.
@@ -125,23 +137,22 @@ Returns 1 if cancelling was successful, 0 otherwise.
 die()s on error.
 
 =cut
-sub cancel_gearman_job($$)
+sub cancel_gearman_job($;$)
 {
-	my $class = shift;
-	my $gearman_job_handle = shift;
+	my ($gearman_job_handle, $config) = @_;
 
-	if (ref $class) {
-		die "Use this subroutine as a static method, e.g. GJS->cancel_gearman_job()";
+	unless ($config) {
+		# Using default configuration
+		DEBUG("Will use default configuration");
+		$config = GJS::Configuration->new();
 	}
 
-	my $config = $class->_configuration;
-
-	my $gearman_job_id = $class->_gearman_job_id_from_handle($gearman_job_handle);
+	my $gearman_job_id = _gearman_job_id_from_handle($gearman_job_handle);
 
 	# Neither Gearman::Client nor Gearman::XS::Client provides a helper
 	# subroutine to do this, so we'll have to cancel the job by directly
 	# connecting to all the servers
-	foreach my $server (@{$config->{servers}}) {
+	foreach my $server (@{$config->gearman_servers}) {
 		my ($host, $port) = split(':', $server);
 
 		$port ||= 4730;
@@ -151,14 +162,14 @@ sub cancel_gearman_job($$)
 		    PeerHost => $host,
 		    PeerPort => $port,
 		    Proto => 'tcp',
-		) or die "Unable to connect to Gearman server: $!\n";
+		) or LOGDIE("Unable to connect to Gearman server: $!");
 
 		$socket->send("cancel job " . $gearman_job_id . "\r\n");
 
 		my $response = "";
 		$socket->recv($response, 1024);
 		if ($response ne "OK\r\n") {
-			say STDERR "Unable to cancel Gearman job '$gearman_job_id'";
+			WARN("Unable to cancel Gearman job '$gearman_job_id'");
 			$socket->close();
 			return 0;
 		}
@@ -170,7 +181,7 @@ sub cancel_gearman_job($$)
 }
 
 
-=head2 (static) C<log_path_for_gearman_job($function_name, $gearman_job_handle)>
+=head2 (static) C<log_path_for_gearman_job($function_name, $gearman_job_handle[, $config])>
 
 Get a path to where Gearman expects to save the job's log.
 
@@ -184,6 +195,8 @@ Parameters:
 
 =item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
+=item * (optional) Instance of GJS::Configuration
+
 =back
 
 Returns log path where the job's log is being written, e.g.
@@ -192,37 +205,35 @@ Returns log path where the job's log is being written, e.g.
 die()s on error.
 
 =cut
-sub log_path_for_gearman_job($$$)
+sub log_path_for_gearman_job($$;$)
 {
-	my $class = shift;
-	my $function_name = shift;
-	my $gearman_job_handle = shift;
+	my ($function_name, $gearman_job_handle, $config) = @_;
 
-	if (ref $class) {
-		die "Use this subroutine as a static method, e.g. GJS->log_path_for_gearman_job()";
+	unless ($config) {
+		# Using default configuration
+		DEBUG("Will use default configuration");
+		$config = GJS::Configuration->new();
 	}
 
 	# If the job is not running, the log path will not be available
-	my $job_status = $class->get_gearman_status($gearman_job_handle);
+	my $job_status = get_gearman_status($gearman_job_handle, $config);
 	if ((! $job_status) or (! $job_status->{running})) {
 		warn "Job '$gearman_job_handle' is not running, so the path returned might not yet exist. Try again later.";
 	}
 
-	my $config = $class->_configuration;
-
-	my $gearman_job_id = $class->_gearman_job_id_from_handle($gearman_job_handle);
+	my $gearman_job_id = _gearman_job_id_from_handle($gearman_job_handle);
 
 	# Sanitize the ID just like run_locally() would
 	$gearman_job_id = _sanitize_for_path($gearman_job_id);
 
-	my $log_path_glob = $class->_init_and_return_worker_log_dir($function_name) . $gearman_job_id . '*.log';
+	my $log_path_glob = _init_and_return_worker_log_dir($function_name, $config) . $gearman_job_id . '*.log';
 	my @log_paths = glob $log_path_glob;
 
 	if (scalar @log_paths == 0) {
-		die "Log path not found for expression: $log_path_glob";
+		LOGDIE("Log path not found for expression: $log_path_glob");
 	}
 	if (scalar @log_paths > 1) {
-		die "Two or more logs found for expression: $log_path_glob";
+		LOGDIE("Two or more logs found for expression: $log_path_glob");
 	}
 
 	return $log_paths[0];
@@ -242,9 +253,9 @@ sub log_path_for_gearman_job($$$)
 # Returns: unique job ID, e.g.:
 # * "084567C4146F11E38F00CB951DB7256D.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)", or
 # * "H_tundra.home_18.NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
-sub _unique_path_job_id($$$;$)
+sub _unique_path_job_id($$;$)
 {
-	my ($class, $function_name, $job_args, $gearman_job_id) = @_;
+	my ($function_name, $job_args, $gearman_job_id) = @_;
 
 	unless ($function_name) {
 		return undef;
@@ -259,7 +270,7 @@ sub _unique_path_job_id($$$;$)
 		# by knowing the Gearman job ID.
 
 		# Strip the host part (if present)
-		$unique_id = GJS->_gearman_job_id_from_handle($gearman_job_id);
+		$unique_id = _gearman_job_id_from_handle($gearman_job_id);
 
 	} else {
 
@@ -276,7 +287,7 @@ sub _unique_path_job_id($$$;$)
 	}
 
 	# ID goes first in case the job name shortener decides to cut out a part of the job ID
-	my $gjs_job_id = $unique_id. '.' . $class->_unique_job_id($function_name, $job_args);
+	my $gjs_job_id = $unique_id. '.' . _unique_job_id($function_name, $job_args);
 	if (length ($gjs_job_id) > GJS_JOB_ID_MAX_LENGTH) {
 		$gjs_job_id = substr($gjs_job_id, 0, GJS_JOB_ID_MAX_LENGTH);
 	}
@@ -294,9 +305,11 @@ sub _unique_path_job_id($$$;$)
 # * hashref of job arguments, e.g. "{ 'how_many_bottles' => 13 }"
 #
 # Returns: unique job ID, e.g. "NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
-sub _unique_job_id($$$)
+#
+# FIXME maybe use Data::Dumper?
+sub _unique_job_id($$)
 {
-	my ($class, $function_name, $job_args) = @_;
+	my ($function_name, $job_args) = @_;
 
 	unless ($function_name) {
 		return undef;
@@ -322,52 +335,49 @@ sub _sanitize_for_path($)
 # Create and return a configured instance of Gearman::Client
 sub _gearman_xs_client($)
 {
-	my $class = shift;
-
-	if (ref $class) {
-		die "Use this subroutine as a static method, e.g. GJS->_gearman_xs_client()";
-	}
-
-	my $config = $class->_configuration;
+	my $config = shift;
 
 	my $client = new Gearman::XS::Client;
 
-	my $ret = $client->add_servers(join(',', @{$config->{servers}}));
+	unless (scalar (@{$config->gearman_servers})) {
+		LOGDIE("No Gearman servers are configured.");
+	}
+
+	my $ret = $client->add_servers(join(',', @{$config->gearman_servers}));
 	unless ($ret == GEARMAN_SUCCESS) {
-		die "Unable to add Gearman servers: " . $client->error();
+		LOGDIE("Unable to add Gearman servers: " . $client->error());
 	}
 
 	$client->set_created_fn(sub {
 		my $task = shift;
-		say STDERR "Gearman task created: '" . $task->job_handle() . '"';
+		DEBUG("Gearman task created: '" . $task->job_handle() . '"');
 		return GEARMAN_SUCCESS;
 	});
 
 	$client->set_data_fn(sub {
 		my $task = shift;
-		say STDERR "Data sent to Gearman task '" . $task->job_handle()
-		         . "': " . $task->data();
+		DEBUG("Data sent to Gearman task '" . $task->job_handle() . "': " . $task->data());
 		return GEARMAN_SUCCESS;
 	});
 
 	$client->set_status_fn(sub {
 		my $task = shift;
-		say STDERR "Status updated for Gearman task '" . $task->job_handle()
+		DEBUG("Status updated for Gearman task '" . $task->job_handle()
 		         . "': " . $task->numerator()
-		         . " / " . $task->denominator();
+		         . " / " . $task->denominator());
 		return GEARMAN_SUCCESS;
 	});
 
 	$client->set_complete_fn(sub {
 		my $task = shift;
-		say STDERR "Gearman task '" . $task->job_handle()
-		         . "' completed with data: " . ($task->data() || '');
+		DEBUG("Gearman task '" . $task->job_handle()
+		         . "' completed with data: " . ($task->data() || ''));
 		return GEARMAN_SUCCESS;
 	});
 
 	$client->set_fail_fn(sub {
 		my $task = shift;
-		say STDERR "Gearman task failed: '" . $task->job_handle() . '"';
+		DEBUG("Gearman task failed: '" . $task->job_handle() . '"');
 		return GEARMAN_SUCCESS;
 	});
 
@@ -384,14 +394,9 @@ sub _gearman_xs_client($)
 # Returns: Gearman job ID (e.g. "H:localhost.localdomain:8")
 #
 # Dies on error.
-sub _gearman_job_id_from_handle($$)
+sub _gearman_job_id_from_handle($)
 {
-	my $class = shift;
 	my $gearman_job_handle = shift;
-
-	if (ref $class) {
-		die "Use this subroutine as a static method, e.g. GJS->_gearman_job_id_from_handle()";
-	}
 
 	my $gearman_job_id;
 
@@ -406,7 +411,7 @@ sub _gearman_job_id_from_handle($$)
 
 	# Validate
 	unless ($gearman_job_id =~ /^H:.+?:\d+?$/) {
-		die "Invalid Gearman job ID: $gearman_job_id";
+		LOGDIE("Invalid Gearman job ID: $gearman_job_id");
 	}
 
 	return $gearman_job_id;
@@ -415,14 +420,12 @@ sub _gearman_job_id_from_handle($$)
 # (static) Initialize (create missing directories) and return a worker log directory path (with trailing slash)
 sub _init_and_return_worker_log_dir($$)
 {
-	my ($class, $function_name) = @_;
+	my ($function_name, $config) = @_;
 
-	if (ref $class) {
-		die "Use this subroutine as a static method.";
+	my $worker_log_dir = $config->worker_log_dir;
+	unless ($worker_log_dir) {
+		LOGDIE("Worker log directory is undefined.");
 	}
-
-	my $config = $class->_configuration;
-	my $worker_log_dir = $config->{worker_log_dir} || Sys::Path->logdir . '/gjs/';
 
 	# Add a trailing slash
     $worker_log_dir =~ s!/*$!/!;
@@ -437,22 +440,6 @@ sub _init_and_return_worker_log_dir($$)
     return $worker_log_dir;
 }
 
-# (static) Return configuration, die() on error
-sub _configuration($)
-{
-	my $class = shift;
-
-	my $config = LoadFile(GJS_CONFIG_FILE);
-	unless ($config) {
-		LOGDIE("Unable to read configuration from '" . GJS_CONFIG_FILE . "': $!");
-	}
-	unless (scalar (@{$config->{servers}})) {
-		die "No servers are configured.";
-	}
-
-	return $config;	
-}
-
 # Serialize a hashref into string (to be passed to Gearman)
 #
 # Parameters:
@@ -462,21 +449,16 @@ sub _configuration($)
 # * a string (string is empty if the hashref is undef)
 # 
 # Dies on error.
-sub _serialize_hashref($$)
+sub _serialize_hashref($)
 {
-	my $class = shift;
 	my $hashref = shift;
-
-	if (ref $class) {
-		die "Use this subroutine as a static method, e.g. GJS->_serialize_hashref()";
-	}
 
 	unless (defined $hashref) {
 		return '';
 	}
 
 	unless (ref $hashref eq 'HASH') {
-		die "Parameter is not a hashref.";
+		LOGDIE("Parameter is not a hashref.");
 	}
 
 	# Gearman accepts only scalar arguments
@@ -493,12 +475,12 @@ sub _serialize_hashref($$)
 			$error .= "Original hashref: " . Dumper($hashref);
 			$error .= "Deserialized hashref: " . Dumper($hashref_deserialized);
 
-			die $error;
+			LOGDIE($error);
 		}
 	};
 	if ($@)
 	{
-		die "Unable to serialize hashref with the Storable module: $@";
+		LOGDIE("Unable to serialize hashref with the Storable module: $@");
 	}
 
 	return $hashref_serialized;
@@ -514,14 +496,9 @@ sub _serialize_hashref($$)
 # * undef if the string is undef or empty
 # 
 # Dies on error.
-sub _unserialize_hashref($$)
+sub _unserialize_hashref($)
 {
-	my $class = shift;
 	my $string = shift;
-
-	if (ref $class) {
-		die "Use this subroutine as a static method, e.g. GJS->_unserialize_hashref()";
-	}
 
 	unless ($string) {
 		return undef;
@@ -534,42 +511,34 @@ sub _unserialize_hashref($$)
 		$hashref = thaw($string);
 
 		unless (defined $hashref) {
-			die "Unserialized hashref is undefined.";
+			LOGDIE("Unserialized hashref is undefined.");
 		}
 
 		unless (ref $hashref eq 'HASH') {
-			die "Result is not a hashref.";
+			LOGDIE("Result is not a hashref.");
 		}
 
 	};
 	if ($@)
 	{
-		die "Unable to unserialize string with the Storable module: $@";
+		LOGDIE("Unable to unserialize string '$string' with the Storable module: $@");
 	}
 
 	return $hashref;
 }
 
 # Send email to someone; returns 1 on success, 0 on failure
-sub _send_email($$$$)
+sub _send_email($$$)
 {
-    my ( $class, $subject, $message ) = @_;
+    my ( $subject, $message, $config ) = @_;
 
-    my $config = $class->_configuration;
-
-    unless (scalar (@{$config->{ notification_emails }->{ recipients }})) {
+    unless (scalar (@{$config->notifications_emails})) {
     	# No one to send mail to
     	return 1;
     }
 
-	if (ref $class) {
-		die "Use this subroutine as a static method, e.g. GJS->_send_email()";
-	}
-
-	my $from_email = $config->{ notification_emails }->{ from_email } || 'gjs_donotreply@example.com';
-	# Two slashes because prefix may be empty:
-	my $subject_prefix = $config->{ notification_emails }->{ subject_prefix } // '[GJS]';
-	$subject = ($subject_prefix ? "$subject_prefix " : '' ) . $subject;
+	my $from_email = $config->notifications_from_address;
+	$subject = ($config->notifications_subject_prefix ? $config->notifications_subject_prefix . ' ' : '' ) . $subject;
 
 	my $message_body = <<"EOF";
 Hello,
@@ -581,11 +550,11 @@ Gearman Job Scheduler (GJS)
 
 EOF
 
-	# say STDERR "Will send email to: " . Dumper($config->{ notification_emails }->{ recipients });
-	# say STDERR "Subject: $subject";
-	# say STDERR "Message: $message_body";
+	# DEBUG("Will send email to: " . Dumper($config->notifications_emails));
+	# DEBUG("Subject: $subject");
+	# DEBUG("Message: $message_body");
 
-	foreach my $to_email (@{$config->{ notification_emails }->{ recipients }})
+	foreach my $to_email (@{$config->notifications_emails})
 	{
 	    my $email = Email::MIME->create(
 	        header_str => [
@@ -602,7 +571,7 @@ EOF
 
 	    unless ( try_to_sendmail( $email ) )
 	    {
-	        say STDERR "Unable to send email to $to_email: $!";
+	        WARN("Unable to send email to $to_email: $!");
 	        return 0;
 	    }
 	}
