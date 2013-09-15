@@ -721,8 +721,6 @@ no Moose;    # gets rid of scaffolding
 
 =over 4
 
-=item * rename to a name usable in Media Cloud infrastructure (make a proper Perl module out of it)
-
 =item * code formatting
 
 =item * test timeout
