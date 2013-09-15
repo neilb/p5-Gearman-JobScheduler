@@ -141,8 +141,8 @@ sub run_all_workers($$)
 
 sub main()
 {
-	# Default configuration
-	my $config = Gearman::JobScheduler::Configuration->new();
+	# Initialize with default configuration (to be customized later)
+	my $config = Gearman::JobScheduler::_default_configuration();
 
 
 	# Override default configuration options from the command line if needed

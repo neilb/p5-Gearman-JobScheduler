@@ -89,9 +89,7 @@ sub job_status($;$)
 	my ($gearman_job_id, $config) = @_;
 
 	unless ($config) {
-		# Using default configuration
-		DEBUG("Will use default configuration");
-		$config = Gearman::JobScheduler::Configuration->new();
+		$config = Gearman::JobScheduler::_default_configuration();
 	}
 
 	my $client = _gearman_xs_client($config);
@@ -142,9 +140,7 @@ sub cancel_gearman_job($;$)
 	my ($gearman_job_handle, $config) = @_;
 
 	unless ($config) {
-		# Using default configuration
-		DEBUG("Will use default configuration");
-		$config = Gearman::JobScheduler::Configuration->new();
+		$config = Gearman::JobScheduler::_default_configuration();
 	}
 
 	my $gearman_job_id = _gearman_job_id_from_handle($gearman_job_handle);
@@ -210,9 +206,7 @@ sub log_path_for_gearman_job($$;$)
 	my ($function_name, $gearman_job_handle, $config) = @_;
 
 	unless ($config) {
-		# Using default configuration
-		DEBUG("Will use default configuration");
-		$config = Gearman::JobScheduler::Configuration->new();
+		$config = Gearman::JobScheduler::_default_configuration();
 	}
 
 	# If the job is not running, the log path will not be available
@@ -526,6 +520,13 @@ sub _unserialize_hashref($)
 	}
 
 	return $hashref;
+}
+
+# Returns default configuration (in case a modified one doesn't exist)
+sub _default_configuration()
+{
+	DEBUG("Will use default configuration");
+	return Gearman::JobScheduler::Configuration->new();
 }
 
 # Send email to someone; returns 1 on success, 0 on failure

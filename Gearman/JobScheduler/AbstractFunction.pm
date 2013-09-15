@@ -288,9 +288,7 @@ sub run_locally($;$$$)
 	}
 
 	unless ($config) {
-		# Using default configuration
-		DEBUG("Will use default configuration");
-		$config = Gearman::JobScheduler::Configuration->new();
+		$config = Gearman::JobScheduler::_default_configuration();
 	}
 
 	# say STDERR "Running locally";
@@ -516,9 +514,7 @@ sub run_on_gearman($;$$)
 	}
 
 	unless ($config) {
-		# Using default configuration
-		DEBUG("Will use default configuration");
-		$config = Gearman::JobScheduler::Configuration->new();
+		$config = Gearman::JobScheduler::_default_configuration();
 	}
 
 	my $client = Gearman::JobScheduler::_gearman_xs_client($config);
@@ -602,9 +598,7 @@ sub enqueue_on_gearman($;$$)
 	}
 
 	unless ($config) {
-		# Using default configuration
-		DEBUG("Will use default configuration");
-		$config = Gearman::JobScheduler::Configuration->new();
+		$config = Gearman::JobScheduler::_default_configuration();
 	}
 
 	my $client = Gearman::JobScheduler::_gearman_xs_client($config);
