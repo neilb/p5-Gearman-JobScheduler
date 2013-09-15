@@ -46,7 +46,7 @@ sub run($;$)
 
 
 # Return individual job's timeout (0 for no timeout)
-sub job_timeout()
+sub timeout()
 {
 	# No timeout
 	return 0;

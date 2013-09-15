@@ -97,7 +97,7 @@ requires 'run';
 
 =head2 OPTIONAL
 
-=head3 (static) C<job_timeout()>
+=head3 (static) C<timeout()>
 
 Return the timeout of each job.
 
@@ -106,7 +106,7 @@ Returns the timeout (in seconds) of each job or 0 if there's no timeout.
 Default implementation of this subroutine returns 0 (no timeout).
 
 =cut
-sub job_timeout()
+sub timeout()
 {
 	# By default, individual job never times out
 	return 0;

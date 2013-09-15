@@ -48,7 +48,7 @@ Writes log to `STDOUT` or `STDERR` (preferably the latter).
 
 ## OPTIONAL
 
-### (static) `job_timeout()`
+### (static) `timeout()`
 
 Return the timeout of each job.
 
