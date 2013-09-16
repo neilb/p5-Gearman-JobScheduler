@@ -428,7 +428,7 @@ sub _init_and_return_worker_log_dir($$)
     $worker_log_dir =~ s!/*$!/!;
 
     # Append the function name
-    $worker_log_dir .= $function_name . '/';
+    $worker_log_dir .= _sanitize_for_path($function_name) . '/';
 
     unless ( -d $worker_log_dir ) {
     	make_path( $worker_log_dir );
