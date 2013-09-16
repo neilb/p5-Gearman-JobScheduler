@@ -729,4 +729,6 @@ no Moose;    # gets rid of scaffolding
 
 =item * unit tests
 
+=item * remove the requirement to pass a function name parameter to log_path_for_gearman_job()
+
 =back
