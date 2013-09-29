@@ -166,8 +166,8 @@ enqueued successfully, `die()`s on error.
 
 # TODO
 
-- rename to a name usable in Media Cloud infrastructure (make a proper Perl module out of it)
 - code formatting
 - test timeout
 - store Gearman queue in PostgreSQL?
 - unit tests
+- remove the requirement to pass a function name parameter to log\_path\_for\_gearman\_job()
