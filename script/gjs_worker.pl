@@ -12,8 +12,6 @@ use Gearman::JobScheduler;
 use Gearman::JobScheduler::Configuration;
 use Gearman::JobScheduler::Worker;
 
-use constant PM_MAX_PROCESSES => 32;
-
 use Log::Log4perl qw(:easy);
 Log::Log4perl->easy_init({ level => $DEBUG, utf8=>1, layout => "%d{ISO8601} [%P]: %m%n" });
 
