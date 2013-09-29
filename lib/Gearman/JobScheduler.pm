@@ -5,7 +5,7 @@ C<Gearman::JobScheduler> - Gearman utilities.
 =cut
 package Gearman::JobScheduler;
 
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 use strict;
 use warnings;

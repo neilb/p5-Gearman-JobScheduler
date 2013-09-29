@@ -5,6 +5,7 @@ use warnings;
 use Modern::Perl "2012";
 
 use FindBin;
+use lib "$FindBin::Bin/../lib";
 use lib "$FindBin::Bin/../samples";
 
 use Gearman::JobScheduler;

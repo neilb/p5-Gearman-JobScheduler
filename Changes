@@ -1,2 +1,6 @@
+v0.02   2013-09-30
+    * Moved worker helper subroutines to a separate package so that they can be
+      reused more easily.
+
 v0.01   2013-09-16
     * Initial release
