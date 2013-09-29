@@ -1,3 +1,3 @@
 #!/bin/bash
 
-pod2markdown Gearman/JobScheduler/AbstractFunction.pm > README.mdown
+pod2markdown lib/Gearman/JobScheduler/AbstractFunction.pm > README.mdown
