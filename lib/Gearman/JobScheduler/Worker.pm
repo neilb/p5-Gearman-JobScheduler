@@ -59,12 +59,24 @@ sub import_gearman_function($)
 
 
 # Run a single worker
-sub run_worker($$)
+sub run_worker($)
 {
-	my ($config, $gearman_function_name_or_path) = @_;
+	my ($gearman_function_name_or_path) = @_;
 
 	my $gearman_function_name = import_gearman_function($gearman_function_name_or_path);
 	INFO("Initializing with Gearman function '$gearman_function_name' from '$gearman_function_name_or_path'.");
+
+	my $config = $gearman_function_name->configuration();
+
+	INFO("Will use Gearman servers: " . join(' ', @{$config->gearman_servers}));
+	INFO("Will write logs to: " . $config->worker_log_dir);
+	if (scalar @{$config->notifications_emails}) {
+		INFO('Will send notifications about failed jobs to: ' . join(' ', @{$config->notifications_emails}));
+		INFO('(emails will be sent from "' . $config->notifications_from_address
+			     . '" and prefixed with "' . $config->notifications_subject_prefix . '")');
+	} else {
+		INFO('Will not send notifications anywhere about failed jobs.');
+	}
 
 	my $ret;
 	my $worker = new Gearman::XS::Worker;
@@ -113,9 +125,9 @@ sub run_worker($$)
 
 
 # Run all workers
-sub run_all_workers($$)
+sub run_all_workers($)
 {
-	my ($config, $gearman_functions_directory) = @_;
+	my ($gearman_functions_directory) = @_;
 
 	# Run all workers
 	INFO("Initializing with all functions from directory '$gearman_functions_directory'.");
@@ -130,7 +142,7 @@ sub run_all_workers($$)
 
 		$pm->start($function_module) and next;	# do the fork
 
-		run_worker($config, $function_module);
+		run_worker($function_module);
 
 		$pm->finish; # do the exit in the child process
 

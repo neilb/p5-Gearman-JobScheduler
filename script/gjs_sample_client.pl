@@ -35,10 +35,10 @@ sub main()
 	say STDERR "Will enqueue adding two numbers on Gearman";
 	$gearman_job_id = Addition->enqueue_on_gearman({a => $operand_a, b => $operand_b});
 	say STDERR "Gearman job ID: $gearman_job_id";
-	say STDERR "Status of the addition job: " . Dumper(Gearman::JobScheduler::job_status($gearman_job_id));
+	say STDERR "Status of the addition job: " . Dumper(Gearman::JobScheduler::job_status(Addition->name(), $gearman_job_id));
 	sleep(1);
-	say STDERR "Status of the addition job after 1 second: " . Dumper(Gearman::JobScheduler::job_status($gearman_job_id));
-	say STDERR "Log path to the addition job: " . Dumper(Gearman::JobScheduler::log_path_for_gearman_job('Addition', $gearman_job_id));
+	say STDERR "Status of the addition job after 1 second: " . Dumper(Gearman::JobScheduler::job_status(Addition->name(), $gearman_job_id));
+	say STDERR "Log path to the addition job: " . Dumper(Gearman::JobScheduler::log_path_for_gearman_job(Addition->name(), $gearman_job_id));
 
 	# Failing job
 	say STDERR "Will run a failing job locally";

@@ -169,6 +169,25 @@ sub notify_on_failure()
 }
 
 
+=head3 (static) C<configuration()>
+
+Return an instance or a subclass of C<Gearman::JobScheduler::Configuration> to
+be used as default configuration by both workers and clients.
+
+Workers and clients will still be able to override this configuration by
+passing their own C<config> argument. This configuration will be used if no
+such argument is present.
+
+Default implementation of this subroutine returns an instance of
+C<Gearman::JobScheduler::Configuration> (default configuration).
+
+=cut
+sub configuration()
+{
+	return Gearman::JobScheduler::Configuration->instance;
+}
+
+
 =head3 (static) C<priority()>
 
 Return priority of the job ("low", "normal" or "high"). This will influence
@@ -287,8 +306,10 @@ sub run_locally($;$$$)
 		die "Use this subroutine as a static method, e.g. MyGearmanFunction->run_locally()";
 	}
 
+	my $function_name = $class->name();
+
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration();
+		$config = Gearman::JobScheduler::_default_configuration($function_name);
 	}
 
 	# say STDERR "Running locally";
@@ -300,7 +321,6 @@ sub run_locally($;$$$)
 		die "run() should accept a single hashref for all the arguments.";
 	}
 
-	my $function_name = $class->_function_name();
 	my $gjs_job_id;
 	if ($gearman_job) {
 		# Running from Gearman
@@ -513,12 +533,13 @@ sub run_on_gearman($;$$)
 		die "Use this subroutine as a static method, e.g. MyGearmanFunction->run_on_gearman()";
 	}
 
+	my $function_name = $class->name;
+
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration();
+		$config = Gearman::JobScheduler::_default_configuration($function_name);
 	}
 
 	my $client = Gearman::JobScheduler::_gearman_xs_client($config);
-	my $function_name = $class->_function_name;
 	unless ($function_name) {
 		die "Unable to determine function name.";
 	}
@@ -597,12 +618,13 @@ sub enqueue_on_gearman($;$$)
 		die "Use this subroutine as a static method, e.g. MyGearmanFunction->enqueue_on_gearman()";
 	}
 
+	my $function_name = $class->name;
+
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration();
+		$config = Gearman::JobScheduler::_default_configuration($function_name);
 	}
 
 	my $client = Gearman::JobScheduler::_gearman_xs_client($config);
-	my $function_name = $class->_function_name;
 	unless ($function_name) {
 		die "Unable to determine function name.";
 	}
@@ -645,6 +667,45 @@ sub enqueue_on_gearman($;$$)
 }
 
 
+=head2 (static) C<name()>
+
+Returns a Gearman function's name (e.g. C<NinetyNineBottlesOfBeer>).
+
+Usage:
+
+	NinetyNineBottlesOfBeer->name();
+
+Parameters:
+
+=over 4
+
+=item * Class or class instance
+
+=back
+
+=cut
+sub name($)
+{
+	my $self_or_class = shift;
+
+	my $function_name = '';
+	if (ref($self_or_class)) {
+		# Instance
+		$function_name = '' . ref($self_or_class);
+	} else {
+		# Static
+		$function_name = $self_or_class;
+	}
+
+	if ($function_name eq 'AbstractFunction') {
+		die "Unable to determine function name.";
+	}
+
+	return $function_name;
+}
+
+
+
 # _run_locally_from_gearman_worker() will pass this parameter to run_locally()
 # which, in turn, will temporarily place an instance of Gearman::XS::Job to
 # this variable so that set_progress() helper can later use it
@@ -681,27 +742,6 @@ sub _run_locally_from_gearman_worker($$;$)
 }
 
 
-# Returns function name (e.g. 'NinetyNineBottlesOfBeer')
-sub _function_name($)
-{
-	my $self_or_class = shift;
-
-	my $function_name = '';
-	if (ref($self_or_class)) {
-		# Instance
-		$function_name = '' . ref($self_or_class);
-	} else {
-		# Static
-		$function_name = $self_or_class;
-	}
-
-	if ($function_name eq 'AbstractFunction') {
-		die "Unable to determine function name.";
-	}
-
-	return $function_name;
-}
-
 # (static) Reset Log::Log4perl to write to the STDERR / STDOUT and not to file
 sub _reset_log4perl()
 {
@@ -728,7 +768,5 @@ no Moose;    # gets rid of scaffolding
 =item * store Gearman queue in PostgreSQL?
 
 =item * unit tests
-
-=item * remove the requirement to pass a function name parameter to log_path_for_gearman_job()
 
 =back

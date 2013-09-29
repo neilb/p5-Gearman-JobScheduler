@@ -9,6 +9,7 @@ use warnings;
 use Modern::Perl "2012";
 
 use Moose;
+use MooseX::Singleton;	# ->instance becomes available
 use Sys::Path;
 
 

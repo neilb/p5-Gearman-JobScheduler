@@ -23,6 +23,7 @@ my $builder = Module::Build->new(
         'Modern::Perl' => 0,
         'Moose' => 0,
         'Moose::Role' => 0,
+        'MooseX::Singleton' => 0,
         'IO::File' => 0,
         'Capture::Tiny' => 0,
         'Time::HiRes' => 0,

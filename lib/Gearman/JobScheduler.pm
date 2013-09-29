@@ -50,13 +50,15 @@ use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
 
 
-=head2 (static) C<job_status($gearman_job_id[, $config])>
+=head2 (static) C<job_status($function_name, $gearman_job_id[, $config])>
 
 Get Gearman job status.
 
 Parameters:
 
 =over 4
+
+=item * Gearman function name (e.g. "NinetyNineBottlesOfBeer")
 
 =item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
@@ -86,12 +88,12 @@ Returns hashref with the job status, e.g.:
 Returns undef if the job ID was not found; dies on error.
 
 =cut
-sub job_status($;$)
+sub job_status($$;$)
 {
-	my ($gearman_job_id, $config) = @_;
+	my ($function_name, $gearman_job_id, $config) = @_;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration();
+		$config = Gearman::JobScheduler::_default_configuration($function_name);
 	}
 
 	my $client = _gearman_xs_client($config);
@@ -116,7 +118,7 @@ sub job_status($;$)
 }
 
 
-=head2 (static) C<cancel_gearman_job($gearman_job_id[, $config])>
+=head2 (static) C<cancel_gearman_job($function_name, $gearman_job_id[, $config])>
 
 (Attempt to) cancel a Gearman job.
 
@@ -125,6 +127,8 @@ sub job_status($;$)
 Parameters:
 
 =over 4
+
+=item * Gearman function name (e.g. "NinetyNineBottlesOfBeer")
 
 =item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
@@ -137,12 +141,12 @@ Returns 1 if cancelling was successful, 0 otherwise.
 die()s on error.
 
 =cut
-sub cancel_gearman_job($;$)
+sub cancel_gearman_job($$;$)
 {
-	my ($gearman_job_handle, $config) = @_;
+	my ($function_name, $gearman_job_handle, $config) = @_;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration();
+		$config = Gearman::JobScheduler::_default_configuration($function_name);
 	}
 
 	my $gearman_job_id = _gearman_job_id_from_handle($gearman_job_handle);
@@ -189,7 +193,7 @@ Parameters:
 
 =over 4
 
-=item * Function name (e.g. "NinetyNineBottlesOfBeer")
+=item * Gearman function name (e.g. "NinetyNineBottlesOfBeer")
 
 =item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
@@ -208,11 +212,11 @@ sub log_path_for_gearman_job($$;$)
 	my ($function_name, $gearman_job_handle, $config) = @_;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration();
+		$config = Gearman::JobScheduler::_default_configuration($function_name);
 	}
 
 	# If the job is not running, the log path will not be available
-	my $job_status = job_status($gearman_job_handle, $config);
+	my $job_status = job_status($function_name, $gearman_job_handle, $config);
 	if ((! $job_status) or (! $job_status->{running})) {
 		WARN("Job '$gearman_job_handle' is not running; either it is finished already or hasn't started yet. "
 		   . "Thus, the path returned might not yet exist.");
@@ -524,11 +528,15 @@ sub _unserialize_hashref($)
 	return $hashref;
 }
 
-# Returns default configuration (in case a modified one doesn't exist)
-sub _default_configuration()
+# Returns default configuration (used in case a modified one doesn't exist)
+sub _default_configuration($)
 {
+	my $function_name = shift;
+
 	DEBUG("Will use default configuration");
-	return Gearman::JobScheduler::Configuration->new();
+
+	# We're assuming that the Gearman function Perl module is loaded at this point
+	return $function_name->configuration();
 }
 
 # Send email to someone; returns 1 on success, 0 on failure
