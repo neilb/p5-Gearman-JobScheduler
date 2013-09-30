@@ -1,3 +1,6 @@
+v0.04   2013-09-30
+    * Ability to start multiple worker instances of a single Gearman function
+
 v0.03   2013-09-30
     * Gearman functions can now provide their own default configurations.
 
