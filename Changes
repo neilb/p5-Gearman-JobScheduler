@@ -1,3 +1,6 @@
+v0.07   2013-10-07
+    * Moose 2.1005 requirement.
+
 v0.06   2013-10-07
     * Handle (log) undefined arguments to run() correctly.
 

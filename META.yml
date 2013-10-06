@@ -1,6 +1,6 @@
 ---
 name: Gearman-JobScheduler
-version: 0.06
+version: 0.07
 author:
   - 'Linas Valiukas <linas dot valiukas at gmail dot com>'
 abstract: Gearman job scheduler
@@ -20,8 +20,8 @@ requires:
   Email::Sender::Simple: 0,
   Log::Log4perl: 0,
   Modern::Perl: 0,
-  Moose: 0,
-  Moose::Role: 0,
+  Moose: 2.1005,
+  Moose::Role: 2.1005,
   MooseX::Singleton: 0,
   IO::File: 0,
   Capture::Tiny: 0,
@@ -35,16 +35,16 @@ requires:
 provides:
   Gearman::JobScheduler:
     file: lib/Gearman/JobScheduler.pm
-    version: 0.06
+    version: 0.07
   Gearman::JobScheduler::AbstractFunction:
     file: lib/Gearman/JobScheduler/AbstractFunction.pm
-    version: 0.06
+    version: 0.07
   Gearman::JobScheduler::Configuration:
     file: lib/Gearman/JobScheduler/Configuration.pm
-    version: 0.06
+    version: 0.07
   Gearman::JobScheduler::ErrorLogTrapper:
     file: lib/Gearman/JobScheduler/ErrorLogTrapper.pm
-    version: 0.06
+    version: 0.07
 generated_by: Module::Build version 0.2808
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html

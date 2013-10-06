@@ -26,7 +26,7 @@ use warnings;
 use Modern::Perl "2012";
 use feature qw(switch);
 
-use Moose::Role;
+use Moose::Role 2.1005;
 
 use Gearman::JobScheduler;	# helper subroutines
 use Gearman::JobScheduler::Configuration;
