@@ -1,3 +1,6 @@
+v0.06   2013-10-07
+    * Handle (log) undefined arguments to run() correctly.
+
 v0.05   2013-10-07
     * Use SHA256 hashes for GJS-generated unique job identifiers because the
       job identifier is limited to 64 bytes by Gearman which is usually not
