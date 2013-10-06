@@ -5,7 +5,7 @@ C<Gearman::JobScheduler> - Gearman utilities.
 =cut
 package Gearman::JobScheduler;
 
-$VERSION = '0.04';
+$VERSION = '0.05';
 
 use strict;
 use warnings;
@@ -30,6 +30,8 @@ use Data::UUID;
 use Sys::Path;
 use File::Path qw(make_path);
 
+use Digest::SHA qw(sha256_hex);
+
 use Carp;
 
 use Email::MIME;
@@ -46,8 +48,9 @@ Log::Log4perl->easy_init({
 # flush sockets after every write
 $| = 1;
 
-use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
+# Max. job ID length for GJS jobs (when GJS comes up with a job ID of its own)
+use constant GJS_JOB_ID_MAX_LENGTH => 256;
 
 
 =head2 (static) C<job_status($function_name, $gearman_job_id[, $config])>
@@ -305,7 +308,8 @@ sub _unique_path_job_id($$;$)
 # * Gearman function name, e.g. 'NinetyNineBottlesOfBeer'
 # * hashref of job arguments, e.g. "{ 'how_many_bottles' => 13 }"
 #
-# Returns: unique job ID, e.g. "NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
+# Returns: SHA256 of the unique job ID, e.g. "18114c0e14fe5f3a568f73da16130640b1a318ba"
+# (SHASUM of "NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
 #
 # FIXME maybe use Data::Dumper?
 sub _unique_job_id($$)
@@ -320,8 +324,16 @@ sub _unique_job_id($$)
 	$job_args = ($job_args and scalar keys $job_args)
 		? join(', ', map { "$_ = $job_args->{$_}" } sort(keys $job_args))
 		: '';
+	my $unique_id = "$function_name($job_args)";
 
-	return "$function_name($job_args)";
+	# Gearman limits the "unique" parameter of a task to 64 bytes (see
+	# GEARMAN_MAX_UNIQUE_SIZE in
+	# https://github.com/sni/gearmand/blob/master/libgearman-1.0/limits.h)
+	# which is usually not enough for most Gearman functions, so we hash the
+	# parameter instead
+	$unique_id = sha256_hex($unique_id);
+
+	return $unique_id;
 }
 
 sub _sanitize_for_path($)
