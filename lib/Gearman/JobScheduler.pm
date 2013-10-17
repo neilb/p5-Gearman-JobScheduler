@@ -1,6 +1,6 @@
 =head1 NAME
 
-C<Gearman::JobScheduler> - Gearman utilities.
+C<Gearman::JobScheduler> - Gearman job scheduler utilities.
 
 =cut
 package Gearman::JobScheduler;
