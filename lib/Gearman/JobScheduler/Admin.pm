@@ -22,7 +22,7 @@ use Gearman::JobScheduler::Configuration;
 use Net::Telnet;
 
 
-=head2 (static) C<server_version([$config])>
+=head2 (static) C<server_version($config)>
 
 Get the version number for the server.
 
@@ -30,7 +30,7 @@ Parameters:
 
 =over 4
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -39,19 +39,19 @@ Returns string server version (e.g. '1.1.9').
 Returns C<undef> on error.
 
 =cut
-sub server_version(;$)
+sub server_version($)
 {
 	my $config = shift;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 	# FIXME not implemented
 }
 
 
-=head2 (static) C<server_verbose([$config])>
+=head2 (static) C<server_verbose($config)>
 
 Get the verbose setting for the server.
 
@@ -59,7 +59,7 @@ Parameters:
 
 =over 4
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -88,19 +88,19 @@ Returns string verbose setting - one of the:
 Returns C<undef> on error.
 
 =cut
-sub server_verbose(;$)
+sub server_verbose($)
 {
 	my $config = shift;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 	# FIXME not implemented
 }
 
 
-=head2 (static) C<create_function($function_name[, $config])>
+=head2 (static) C<create_function($function_name, $config)>
 
 Create the function from the server.
 
@@ -110,26 +110,26 @@ Parameters:
 
 =item * Function name (e.g. C<hello_world>)
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
 Returns true (1) if the function has been created, false (C<undef>) on error.
 
 =cut
-sub create_function($;$)
+sub create_function($$)
 {
 	my ($function_name, $config) = @_;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 	# FIXME not implemented
 }
 
 
-=head2 (static) C<drop_function($function_name[, $config])>
+=head2 (static) C<drop_function($function_name, $config)>
 
 Drop the function from the server.
 
@@ -139,26 +139,26 @@ Parameters:
 
 =item * Function name (e.g. C<hello_world>)
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
 Returns true (1) if the function has been dropped, false (C<undef>) on error.
 
 =cut
-sub drop_function($;$)
+sub drop_function($$)
 {
 	my ($function_name, $config) = @_;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 	# FIXME not implemented
 }
 
 
-=head2 (static) C<show_jobs([$config])>
+=head2 (static) C<show_jobs($config)>
 
 Show all jobs on the server.
 
@@ -166,7 +166,7 @@ Parameters:
 
 =over 4
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -197,19 +197,19 @@ Returns a hashref of job statuses, e.g.:
 Returns C<undef> on error.
 
 =cut
-sub show_jobs(;$)
+sub show_jobs($)
 {
 	my $config = shift;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 	# FIXME not implemented
 }
 
 
-=head2 (static) C<show_unique_jobs([$config])>
+=head2 (static) C<show_unique_jobs($config)>
 
 Show unique jobs on server.
 
@@ -217,7 +217,7 @@ Parameters:
 
 =over 4
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -237,19 +237,19 @@ Returns an arrayref of unique job identifiers, e.g.:
 Returns C<undef> on error.
 
 =cut
-sub show_unique_jobs(;$)
+sub show_unique_jobs($)
 {
 	my $config = shift;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 	# FIXME not implemented
 }
 
 
-=head2 (static) C<cancel_job($gearman_job_id[, $config])>
+=head2 (static) C<cancel_job($gearman_job_id, $config)>
 
 Remove a given job from the server's queue.
 
@@ -259,26 +259,26 @@ Parameters:
 
 =item * Gearman job ID (e.g. "H:localhost.localdomain:8")
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
 Returns true (1) if the job has been cancelled, false (C<undef>) on error.
 
 =cut
-sub cancel_job($;$)
+sub cancel_job($$)
 {
 	my ($gearman_job_id, $config) = @_;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 	# FIXME not implemented
 }
 
 
-=head2 (static) C<get_pid([$config])>
+=head2 (static) C<get_pid($config)>
 
 Get Process ID for the server.
 
@@ -286,7 +286,7 @@ Parameters:
 
 =over 4
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -295,19 +295,19 @@ Returns integer PID (e.g. 1234).
 Returns C<undef> on error.
 
 =cut
-sub get_pid(;$)
+sub get_pid($)
 {
 	my $config = shift;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 	# FIXME not implemented
 }
 
 
-sub getpid(;$)
+sub getpid($)
 {
 	# "gearadmin" uses "getpid", not "get_pid", so this is an alias for vendor
 	# compatibility
@@ -315,7 +315,7 @@ sub getpid(;$)
 }
 
 
-=head2 (static) C<status([$config])>
+=head2 (static) C<status($config)>
 
 Status for the server.
 
@@ -323,7 +323,7 @@ Parameters:
 
 =over 4
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -355,19 +355,19 @@ Returns a hashref of Gearman functions and their statuses, e.g.:
 Returns C<undef> on error.
 
 =cut
-sub status(;$)
+sub status($)
 {
 	my $config = shift;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 	# FIXME not implemented
 }
 
 
-=head2 (static) C<workers([$config])>
+=head2 (static) C<workers($config)>
 
 Workers for the server.
 
@@ -375,7 +375,7 @@ Parameters:
 
 =over 4
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -408,18 +408,18 @@ Returns an arrayref of hashrefs for each of the registered worker, e.g.:
 Returns C<undef> on error.
 
 =cut
-sub workers(;$)
+sub workers($)
 {
 	my $config = shift;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 }
 
 
-=head2 (static) C<shutdown([$config])>
+=head2 (static) C<shutdown($config)>
 
 Shutdown server.
 
@@ -427,7 +427,7 @@ Parameters:
 
 =over 4
 
-=item * (optional) Instance of Gearman::JobScheduler::Configuration
+=item * Instance of Gearman::JobScheduler::Configuration
 
 =back
 
@@ -439,7 +439,7 @@ sub shutdown(;$)
 	my $config = shift;
 
 	unless ($config) {
-		$config = Gearman::JobScheduler::_default_configuration($function_name);
+		die "Configuration is undefined.";
 	}
 
 }
