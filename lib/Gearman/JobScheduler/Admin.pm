@@ -21,10 +21,13 @@ use Gearman::JobScheduler::Configuration;
 # commands ourselves.
 use Net::Telnet;
 
+# Connection timeout
+use constant GJS_ADMIN_TIMEOUT => 10;
+
 
 =head2 (static) C<server_version($config)>
 
-Get the version number for the server.
+Get the version number for all the servers in the configuration.
 
 Parameters:
 
@@ -34,7 +37,16 @@ Parameters:
 
 =back
 
-Returns string server version (e.g. '1.1.9').
+Returns hashref of configured servers and their versions, e.g.:
+
+=begin text
+
+	{
+		'localhost:4730' => '1.1.9',
+		# ...
+	}
+
+=end text
 
 Returns C<undef> on error.
 
@@ -47,7 +59,62 @@ sub server_version($)
 		die "Configuration is undefined.";
 	}
 
-	# FIXME not implemented
+	my $versions = {};
+
+	foreach my $server (@{$config->gearman_servers}) {
+
+		my $version = server_version_for_server($server);
+		unless (defined $version) {
+			say STDERR "Unable to determine version for server $server.";
+			return undef;
+		}
+
+		$versions->{ $server } = $version;
+	}
+
+	return $versions;
+}
+
+
+=head2 (static) C<server_version_for_server($server)>
+
+Get the version number for the server.
+
+Parameters:
+
+=over 4
+
+=item * Server as "host:port" (e.g. "localhost:4730")
+
+=back
+
+Returns a string server version, e.g. '1.1.9'.
+
+Returns C<undef> on error.
+
+=cut
+sub server_version_for_server($)
+{
+	my $server = shift;
+
+	my $telnet = _net_telnet_instance_for_server($server);
+
+	$telnet->print('version');
+	my $version = $telnet->getline();
+	chomp $version;
+
+	unless ($version =~ /^OK /) {
+		say STDERR "Server $server didn't respond with 'OK'.";
+		return undef;
+	}
+
+	$version =~ s/^OK //;
+	unless ($version) {
+		say STDERR "Version string is empty.";
+		return undef;
+	}
+
+	return $version;
 }
 
 
@@ -63,7 +130,18 @@ Parameters:
 
 =back
 
-Returns string verbose setting - one of the:
+Returns hashref of configured servers and their verbosity levels, e.g.:
+
+=begin text
+
+	{
+		'localhost:4730' => 'ERROR',
+		# ...
+	}
+
+=end text
+
+Available verbosity levels:
 
 =over 4
 
@@ -96,7 +174,62 @@ sub server_verbose($)
 		die "Configuration is undefined.";
 	}
 
-	# FIXME not implemented
+	my $verbose_levels = {};
+
+	foreach my $server (@{$config->gearman_servers}) {
+
+		my $verbose = server_verbose_for_server($server);
+		unless (defined $verbose) {
+			say STDERR "Unable to determine verbose level for server $server.";
+			return undef;
+		}
+
+		$verbose_levels->{ $server } = $verbose;
+	}
+
+	return $verbose_levels;
+}
+
+
+=head2 (static) C<server_verbose_for_server($server)>
+
+Get the verbose setting for the server.
+
+Parameters:
+
+=over 4
+
+=item * Server as "host:port" (e.g. "localhost:4730")
+
+=back
+
+Returns string verbose setting (see C<server_verbose> for possible values).
+
+Returns C<undef> on error.
+
+=cut
+sub server_verbose_for_server($)
+{
+	my $server = shift;
+
+	my $telnet = _net_telnet_instance_for_server($server);
+
+	$telnet->print('verbose');
+	my $verbose = $telnet->getline();
+	chomp $verbose;
+
+	unless ($verbose =~ /^OK /) {
+		say STDERR "Server $server didn't respond with 'OK'.";
+		return undef;
+	}
+
+	$verbose =~ s/^OK //;
+	unless ($verbose) {
+		say STDERR "Verbose string is empty.";
+		return undef;
+	}
+
+	return $verbose;
 }
 
 
@@ -442,6 +575,22 @@ sub shutdown(;$)
 		die "Configuration is undefined.";
 	}
 
+}
+
+
+sub _net_telnet_instance_for_server($)
+{
+	my $server = shift;
+
+	my ($host, $port) = split(':', $server);
+	$port //= 4730;
+
+	my $telnet = new Net::Telnet(Host => $host,
+								 Port => $port,
+								 Timeout => GJS_ADMIN_TIMEOUT);
+	$telnet->open();
+
+	return $telnet;
 }
 
 
