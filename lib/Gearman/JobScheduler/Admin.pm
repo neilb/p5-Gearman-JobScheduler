@@ -27,7 +27,7 @@ use constant GJS_ADMIN_TIMEOUT => 10;
 
 =head2 (static) C<server_version($config)>
 
-Get the version number for all the servers in the configuration.
+Get the version number from all the configured servers.
 
 Parameters:
 
@@ -63,9 +63,9 @@ sub server_version($)
 
 	foreach my $server (@{$config->gearman_servers}) {
 
-		my $version = server_version_for_server($server);
+		my $version = server_version_on_server($server);
 		unless (defined $version) {
-			say STDERR "Unable to determine version for server $server.";
+			say STDERR "Unable to determine version of server $server.";
 			return undef;
 		}
 
@@ -76,9 +76,9 @@ sub server_version($)
 }
 
 
-=head2 (static) C<server_version_for_server($server)>
+=head2 (static) C<server_version_on_server($server)>
 
-Get the version number for the server.
+Get the version number from a server.
 
 Parameters:
 
@@ -93,7 +93,7 @@ Returns a string server version, e.g. '1.1.9'.
 Returns C<undef> on error.
 
 =cut
-sub server_version_for_server($)
+sub server_version_on_server($)
 {
 	my $server = shift;
 
@@ -104,7 +104,7 @@ sub server_version_for_server($)
 	chomp $version;
 
 	unless ($version =~ /^OK /) {
-		say STDERR "Server $server didn't respond with 'OK'.";
+		say STDERR "Server $server didn't respond with 'OK': $version";
 		return undef;
 	}
 
@@ -120,7 +120,7 @@ sub server_version_for_server($)
 
 =head2 (static) C<server_verbose($config)>
 
-Get the verbose setting for the server.
+Get the verbose setting from all the configured servers.
 
 Parameters:
 
@@ -178,9 +178,9 @@ sub server_verbose($)
 
 	foreach my $server (@{$config->gearman_servers}) {
 
-		my $verbose = server_verbose_for_server($server);
+		my $verbose = server_verbose_on_server($server);
 		unless (defined $verbose) {
-			say STDERR "Unable to determine verbose level for server $server.";
+			say STDERR "Unable to determine verbosity level of server $server.";
 			return undef;
 		}
 
@@ -191,9 +191,9 @@ sub server_verbose($)
 }
 
 
-=head2 (static) C<server_verbose_for_server($server)>
+=head2 (static) C<server_verbose_on_server($server)>
 
-Get the verbose setting for the server.
+Get the verbose setting from a server.
 
 Parameters:
 
@@ -208,7 +208,7 @@ Returns string verbose setting (see C<server_verbose> for possible values).
 Returns C<undef> on error.
 
 =cut
-sub server_verbose_for_server($)
+sub server_verbose_on_server($)
 {
 	my $server = shift;
 
@@ -219,7 +219,7 @@ sub server_verbose_for_server($)
 	chomp $verbose;
 
 	unless ($verbose =~ /^OK /) {
-		say STDERR "Server $server didn't respond with 'OK'.";
+		say STDERR "Server $server didn't respond with 'OK': $verbose";
 		return undef;
 	}
 
@@ -235,7 +235,7 @@ sub server_verbose_for_server($)
 
 =head2 (static) C<create_function($function_name, $config)>
 
-Create the function from the server.
+Create the function on all the configured servers.
 
 Parameters:
 
@@ -293,7 +293,7 @@ sub drop_function($$)
 
 =head2 (static) C<show_jobs($config)>
 
-Show all jobs on the server.
+Show all jobs on all the configured servers.
 
 Parameters:
 
@@ -344,7 +344,7 @@ sub show_jobs($)
 
 =head2 (static) C<show_unique_jobs($config)>
 
-Show unique jobs on server.
+Show unique jobs on all the configured servers.
 
 Parameters:
 
@@ -384,7 +384,7 @@ sub show_unique_jobs($)
 
 =head2 (static) C<cancel_job($gearman_job_id, $config)>
 
-Remove a given job from the server's queue.
+Remove a given job from all the configured servers' queues.
 
 Parameters:
 
@@ -413,7 +413,7 @@ sub cancel_job($$)
 
 =head2 (static) C<get_pid($config)>
 
-Get Process ID for the server.
+Get Process ID for all the configured servers.
 
 Parameters:
 
@@ -440,17 +440,9 @@ sub get_pid($)
 }
 
 
-sub getpid($)
-{
-	# "gearadmin" uses "getpid", not "get_pid", so this is an alias for vendor
-	# compatibility
-	return get_pid(shift);
-}
-
-
 =head2 (static) C<status($config)>
 
-Status for the server.
+Get status from all the configured servers.
 
 Parameters:
 
@@ -502,7 +494,7 @@ sub status($)
 
 =head2 (static) C<workers($config)>
 
-Workers for the server.
+Get a list of workers from all the configured servers.
 
 Parameters:
 
@@ -554,7 +546,7 @@ sub workers($)
 
 =head2 (static) C<shutdown($config)>
 
-Shutdown server.
+Shutdown all the configured servers.
 
 Parameters:
 
@@ -578,6 +570,7 @@ sub shutdown(;$)
 }
 
 
+# Connects to Gearman, returns Net::Telnet instance
 sub _net_telnet_instance_for_server($)
 {
 	my $server = shift;
