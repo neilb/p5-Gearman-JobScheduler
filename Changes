@@ -1,3 +1,11 @@
+v0.08   2013-10-21
+    * Gearman::JobScheduler::Admin utility package for administering the
+      server (just like "gearadmin" does).
+    * Removed Gearman::JobScheduler::cancel_gearman_job() subroutine as
+      redundant.
+    * Don't die() when a log path is not found.
+    * Added Gearman/JobScheduler/Worker.pm to the list of "provided" files.
+
 v0.07   2013-10-07
     * Moose 2.1005 requirement.
 
