@@ -123,7 +123,7 @@ sub job_status($$;$)
 
 Get a path to where Gearman expects to save the job's log.
 
-(Warning: the job has to running; if not, this subroutine will complain and die.)
+(Note: if the job is not running or finished, the log path will be empty.)
 
 Parameters:
 
@@ -139,6 +139,8 @@ Parameters:
 
 Returns log path where the job's log is being written, e.g.
 "/var/log/gjs/NinetyNineBottlesOfBeer/H_tundra.local_93.NinetyNineBottlesOfBeer().log"
+
+Returns C<undef> if no log path was found.
 
 die()s on error.
 
@@ -167,7 +169,8 @@ sub log_path_for_gearman_job($$;$)
 	my @log_paths = glob $log_path_glob;
 
 	if (scalar @log_paths == 0) {
-		LOGDIE("Log path not found for expression: $log_path_glob");
+		INFO("Log path not found for expression: $log_path_glob");
+		return undef;
 	}
 	if (scalar @log_paths > 1) {
 		LOGDIE("Two or more logs found for expression: $log_path_glob");
