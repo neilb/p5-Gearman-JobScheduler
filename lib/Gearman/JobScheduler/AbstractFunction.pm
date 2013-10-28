@@ -565,7 +565,7 @@ sub run_on_gearman($;$$)
 	if ($class->unique()) {
 		# If the job is set to be "unique", we need to pass a "unique identifier"
 		# to Gearman so that it knows which jobs to merge into one
-		@client_args = ($function_name, $args_serialized, Gearman::JobScheduler::_unique_job_id($function_name, $args));
+		@client_args = ($function_name, $args_serialized, Gearman::JobScheduler::unique_job_id($function_name, $args));
 	} else {
 		@client_args = ($function_name, $args_serialized);
 	}
@@ -650,7 +650,7 @@ sub enqueue_on_gearman($;$$)
 	if ($class->unique()) {
 		# If the job is set to be "unique", we need to pass a "unique identifier"
 		# to Gearman so that it knows which jobs to merge into one
-		@client_args = ($function_name, $args_serialized, Gearman::JobScheduler::_unique_job_id($function_name, $args));
+		@client_args = ($function_name, $args_serialized, Gearman::JobScheduler::unique_job_id($function_name, $args));
 	} else {
 		@client_args = ($function_name, $args_serialized);
 	}

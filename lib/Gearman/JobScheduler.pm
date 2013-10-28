@@ -5,7 +5,7 @@ C<Gearman::JobScheduler> - Gearman job scheduler utilities.
 =cut
 package Gearman::JobScheduler;
 
-$VERSION = '0.08';
+$VERSION = '0.09';
 
 use strict;
 use warnings;
@@ -179,6 +179,41 @@ sub log_path_for_gearman_job($$;$)
 	return $log_paths[0];
 }
 
+# (static) Return an unique job ID that will identify a particular job with its
+# arguments
+#
+# * Gearman function name, e.g. 'NinetyNineBottlesOfBeer'
+# * hashref of job arguments, e.g. "{ 'how_many_bottles' => 13 }"
+#
+# Returns: SHA256 of the unique job ID, e.g. "18114c0e14fe5f3a568f73da16130640b1a318ba"
+# (SHASUM of "NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
+#
+# FIXME maybe use Data::Dumper?
+sub unique_job_id($$)
+{
+	my ($function_name, $job_args) = @_;
+
+	unless ($function_name) {
+		return undef;
+	}
+
+	# Convert to string
+	$job_args = ($job_args and scalar keys $job_args)
+		? join(', ', map {
+			$_ . ' = ' . ($job_args->{$_} // 'undef')
+		} sort(keys $job_args))
+		: '';
+	my $unique_id = "$function_name($job_args)";
+
+	# Gearman limits the "unique" parameter of a task to 64 bytes (see
+	# GEARMAN_MAX_UNIQUE_SIZE in
+	# https://github.com/sni/gearmand/blob/master/libgearman-1.0/limits.h)
+	# which is usually not enough for most Gearman functions, so we hash the
+	# parameter instead
+	$unique_id = sha256_hex($unique_id);
+
+	return $unique_id;
+}
 
 # (static) Return an unique, path-safe job name which is suitable for writing
 # to the filesystem (e.g. for logging)
@@ -227,7 +262,7 @@ sub _unique_path_job_id($$;$)
 	}
 
 	# ID goes first in case the job name shortener decides to cut out a part of the job ID
-	my $gjs_job_id = $unique_id. '.' . _unique_job_id($function_name, $job_args);
+	my $gjs_job_id = $unique_id. '.' . unique_job_id($function_name, $job_args);
 	if (length ($gjs_job_id) > GJS_JOB_ID_MAX_LENGTH) {
 		$gjs_job_id = substr($gjs_job_id, 0, GJS_JOB_ID_MAX_LENGTH);
 	}
@@ -236,42 +271,6 @@ sub _unique_path_job_id($$;$)
 	$gjs_job_id = _sanitize_for_path($gjs_job_id);
 
 	return $gjs_job_id;
-}
-
-# (static) Return an unique job ID that will identify a particular job with its
-# arguments
-#
-# * Gearman function name, e.g. 'NinetyNineBottlesOfBeer'
-# * hashref of job arguments, e.g. "{ 'how_many_bottles' => 13 }"
-#
-# Returns: SHA256 of the unique job ID, e.g. "18114c0e14fe5f3a568f73da16130640b1a318ba"
-# (SHASUM of "NinetyNineBottlesOfBeer(how_many_bottles_=_2000)"
-#
-# FIXME maybe use Data::Dumper?
-sub _unique_job_id($$)
-{
-	my ($function_name, $job_args) = @_;
-
-	unless ($function_name) {
-		return undef;
-	}
-
-	# Convert to string
-	$job_args = ($job_args and scalar keys $job_args)
-		? join(', ', map {
-			$_ . ' = ' . ($job_args->{$_} // 'undef')
-		} sort(keys $job_args))
-		: '';
-	my $unique_id = "$function_name($job_args)";
-
-	# Gearman limits the "unique" parameter of a task to 64 bytes (see
-	# GEARMAN_MAX_UNIQUE_SIZE in
-	# https://github.com/sni/gearmand/blob/master/libgearman-1.0/limits.h)
-	# which is usually not enough for most Gearman functions, so we hash the
-	# parameter instead
-	$unique_id = sha256_hex($unique_id);
-
-	return $unique_id;
 }
 
 sub _sanitize_for_path($)
