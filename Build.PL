@@ -42,6 +42,11 @@ my $builder = Module::Build->new(
     add_to_cleanup =>
         [ 'Gearman-JobScheduler-*', 'MANIFEST.bak', 'Makefile' ],
     create_makefile_pl => 'passthrough',
+    meta_merge => {
+        resources => {
+            repository => 'https://github.com/pypt/p5-Gearman-JobScheduler'
+        }
+    },
 );
 
 $builder->create_build_script();
