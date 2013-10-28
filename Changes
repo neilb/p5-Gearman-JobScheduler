@@ -1,9 +1,11 @@
-v0.09   2013-10-28
+Revision history for Perl module Gearman::JobScheduler
+
+0.09   2013-10-28
     * Make "unique_job_id()" public for the use of client applications because
       they might want to generate their own unique job IDs in order to test
       whether or not a job with given parameters is enqueued.
 
-v0.08   2013-10-21
+0.08   2013-10-21
     * Gearman::JobScheduler::Admin utility package for administering the
       server (just like "gearadmin" does).
     * Removed Gearman::JobScheduler::cancel_gearman_job() subroutine as
@@ -11,26 +13,27 @@ v0.08   2013-10-21
     * Don't die() when a log path is not found.
     * Added Gearman/JobScheduler/Worker.pm to the list of "provided" files.
 
-v0.07   2013-10-07
+0.07   2013-10-07
     * Moose 2.1005 requirement.
 
-v0.06   2013-10-07
+0.06   2013-10-07
     * Handle (log) undefined arguments to run() correctly.
 
-v0.05   2013-10-07
+0.05   2013-10-07
     * Use SHA256 hashes for GJS-generated unique job identifiers because the
       job identifier is limited to 64 bytes by Gearman which is usually not
       enough.
 
-v0.04   2013-09-30
+0.04   2013-09-30
     * Ability to start multiple worker instances of a single Gearman function.
 
-v0.03   2013-09-30
+0.03   2013-09-30
     * Gearman functions can now provide their own default configurations.
 
-v0.02   2013-09-30
+0.02   2013-09-30
     * Moved worker helper subroutines to a separate package so that they can be
       reused more easily.
 
-v0.01   2013-09-16
+0.01   2013-09-16
     * Initial release.
+
